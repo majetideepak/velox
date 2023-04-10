@@ -175,7 +175,7 @@ class HiveConnectorSplitBuilder {
   std::shared_ptr<connector::hive::HiveConnectorSplit> build() const {
     return std::make_shared<connector::hive::HiveConnectorSplit>(
         kHiveConnectorId,
-        "file:" + filePath_,
+        (filePath_.substr(0, 5) == "s3://") ? filePath_ : "file:" + filePath_,
         fileFormat_,
         start_,
         length_,

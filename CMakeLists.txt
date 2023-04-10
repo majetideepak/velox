@@ -32,7 +32,7 @@ message(STATUS "Build type: ${CMAKE_BUILD_TYPE}")
 option(
   VELOX_BUILD_TESTING
   "Enable Velox tests. This will enable all other build options automatically."
-  ON)
+  OFF)
 option(
   VELOX_BUILD_MINIMAL
   "Build a minimal set of components only. This will override other build options."
@@ -62,13 +62,13 @@ option(VELOX_ENABLE_EXAMPLES
        "Build examples. This will enable VELOX_ENABLE_EXPRESSION automatically."
        OFF)
 option(VELOX_ENABLE_SUBSTRAIT "Buid Substrait-to-Velox converter." OFF)
-option(VELOX_ENABLE_BENCHMARKS "Enable Velox top level benchmarks." OFF)
+option(VELOX_ENABLE_BENCHMARKS "Enable Velox top level benchmarks." ON)
 option(VELOX_ENABLE_BENCHMARKS_BASIC "Enable Velox basic benchmarks." OFF)
-option(VELOX_ENABLE_S3 "Build S3 Connector" OFF)
+option(VELOX_ENABLE_S3 "Build S3 Connector" ON)
 option(VELOX_ENABLE_HDFS "Build Hdfs Connector" OFF)
-option(VELOX_ENABLE_PARQUET "Enable Parquet support" OFF)
+option(VELOX_ENABLE_PARQUET "Enable Parquet support" ON)
 option(VELOX_ENABLE_ARROW "Enable Arrow support" OFF)
-option(VELOX_ENABLE_CCACHE "Use ccache if installed." ON)
+option(VELOX_ENABLE_CCACHE "Use ccache if installed." OFF)
 
 option(VELOX_BUILD_TEST_UTILS "Builds Velox test utilities" OFF)
 option(VELOX_BUILD_PYTHON_PACKAGE "Builds Velox Python bindings" OFF)

@@ -29,6 +29,7 @@
 #include "velox/common/file/FileSystems.h"
 #include "velox/common/memory/MmapAllocator.h"
 #include "velox/connectors/hive/HiveConnector.h"
+#include "velox/connectors/hive/storage_adapters/s3fs/S3FileSystem.h"
 #include "velox/dwio/common/Options.h"
 #include "velox/dwio/dwrf/reader/DwrfReader.h"
 #include "velox/dwio/parquet/RegisterParquetReader.h"
@@ -231,11 +232,8 @@ class TpchBenchmark {
     aggregate::prestosql::registerAllAggregateFunctions();
     parse::registerTypeResolver();
     filesystems::registerLocalFileSystem();
-    if (FLAGS_use_native_parquet_reader) {
-      parquet::registerParquetReaderFactory(parquet::ParquetReaderType::NATIVE);
-    } else {
-      parquet::registerParquetReaderFactory(parquet::ParquetReaderType::DUCKDB);
-    }
+    filesystems::registerS3FileSystem();
+    parquet::registerParquetReaderFactory(parquet::ParquetReaderType::NATIVE);
     dwrf::registerDwrfReaderFactory();
     ioExecutor_ =
         std::make_unique<folly::IOThreadPoolExecutor>(FLAGS_num_io_threads);

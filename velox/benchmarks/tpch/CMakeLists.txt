@@ -27,6 +27,7 @@ target_link_libraries(
   velox_hive_connector
   velox_exception
   velox_memory
+  velox_s3fs
   velox_process
   velox_serialization
   velox_encode
