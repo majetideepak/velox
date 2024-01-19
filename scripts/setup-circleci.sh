@@ -13,6 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+SCRIPTDIR=$(dirname "${BASH_SOURCE[0]}")
 # Run the Centos8 setup script first.
 source $SCRIPTDIR/setup-centos8.sh
 
