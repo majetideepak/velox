@@ -180,4 +180,9 @@ class RowCursor {
   vector_size_t numRows_ = 0;
 };
 
+std::pair<std::unique_ptr<TaskCursor>, std::vector<RowVectorPtr>> readCursor(
+    const CursorParameters& params,
+    std::function<void(exec::Task*)> addSplits,
+    uint64_t maxWaitMicros = 5'000'000);
+
 } // namespace facebook::velox::exec::test

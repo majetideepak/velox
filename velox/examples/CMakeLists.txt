@@ -12,6 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+add_subdirectory(veloxminiapp)
+
 add_executable(velox_example_simple_functions SimpleFunctions.cpp)
 
 target_link_libraries(velox_example_simple_functions velox_functions_lib

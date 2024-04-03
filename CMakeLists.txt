@@ -58,7 +58,7 @@ message(STATUS "Build type: ${CMAKE_BUILD_TYPE}")
 option(
   VELOX_BUILD_TESTING
   "Enable Velox tests. This will enable all other build options automatically."
-  ON)
+  OFF)
 option(
   VELOX_BUILD_MINIMAL
   "Build a minimal set of components only. This will override other build options."
@@ -96,7 +96,7 @@ option(VELOX_ENABLE_SPARK_FUNCTIONS "Build Spark SQL functions." ON)
 option(VELOX_ENABLE_EXPRESSION "Build expression." ON)
 option(VELOX_ENABLE_EXAMPLES
        "Build examples. This will enable VELOX_ENABLE_EXPRESSION automatically."
-       OFF)
+       ON)
 option(VELOX_ENABLE_SUBSTRAIT "Build Substrait-to-Velox converter." OFF)
 option(VELOX_ENABLE_BENCHMARKS "Enable Velox top level benchmarks." OFF)
 option(VELOX_ENABLE_BENCHMARKS_BASIC "Enable Velox basic benchmarks." OFF)

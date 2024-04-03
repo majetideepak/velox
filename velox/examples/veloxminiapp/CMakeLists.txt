@@ -11,25 +11,16 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-add_library(velox_link_libs INTERFACE)
-target_link_libraries(
-  velox_link_libs
-  INTERFACE velox_caching
-            velox_dwio_catalog_fbhive
-            velox_dwio_common
-            velox_dwio_common_exception
-            velox_encode
-            velox_exception
-            velox_memory
-            velox_process
-            velox_serialization
-            velox_type
-            velox_type_fbhive
-            velox_vector
-            Folly::folly
-            fmt::fmt)
 
-add_subdirectory(common)
-add_subdirectory(catalog)
-# add_subdirectory(dwrf)
-add_subdirectory(parquet)
+add_executable(
+  velox_mini_app VeloxMiniApp.cpp ../../exec/tests/utils/Cursor.cpp
+                 ../../exec/tests/utils/PlanBuilder.cpp)
+
+target_link_libraries(
+  velox_mini_app
+  velox_core
+  velox_hive_connector
+  velox_tpch_connector
+  velox_parse_parser
+  velox_functions_prestosql
+  velox_aggregates)

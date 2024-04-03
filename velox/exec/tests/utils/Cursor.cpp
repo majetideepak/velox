@@ -40,6 +40,20 @@ bool waitForTaskDriversToFinish(exec::Task* task, uint64_t maxWaitMicros) {
   return task->numFinishedDrivers() == task->numTotalDrivers();
 }
 
+bool waitForTaskStateChange(
+    exec::Task* task,
+    TaskState state,
+    uint64_t maxWaitMicros) {
+  // Wait for task to transition to finished state.
+  if (task->state() != state) {
+    auto& executor = folly::QueuedImmediateExecutor::instance();
+    auto future = task->taskCompletionFuture(maxWaitMicros).via(&executor);
+    future.wait();
+  }
+
+  return task->state() == state;
+}
+
 exec::BlockingReason TaskQueue::enqueue(
     RowVectorPtr vector,
     velox::ContinueFuture* future) {
@@ -422,6 +436,51 @@ bool RowCursor::next() {
 
 bool RowCursor::hasNext() {
   return currentRow_ < numRows_ || cursor_->hasNext();
+}
+
+bool waitForTaskFinish(
+    exec::Task* task,
+    TaskState expectedState,
+    uint64_t maxWaitMicros) {
+  // Wait for task to transition to finished state.
+  if (!waitForTaskStateChange(task, expectedState, maxWaitMicros)) {
+    return false;
+  }
+  return waitForTaskDriversToFinish(task, maxWaitMicros);
+}
+
+std::pair<std::unique_ptr<TaskCursor>, std::vector<RowVectorPtr>> readCursor(
+    const CursorParameters& params,
+    std::function<void(exec::Task*)> addSplits,
+    uint64_t maxWaitMicros) {
+  auto cursor = TaskCursor::create(params);
+  // 'result' borrows memory from cursor so the life cycle must be shorter.
+  std::vector<RowVectorPtr> result;
+  auto* task = cursor->task().get();
+  addSplits(task);
+
+  while (cursor->moveNext()) {
+    result.push_back(cursor->current());
+    addSplits(task);
+  }
+
+  if (!waitForTaskFinish(task, TaskState::kFinished, maxWaitMicros)) {
+    // NOTE: there is async memory arbitration might fail the task after all the
+    // results have been consumed and before the task finishes. So we might run
+    // into the failed task state in some rare case such as exposed by
+    // concurrent memory arbitration test.
+    if (task->state() != TaskState::kFinished &&
+        task->state() != TaskState::kRunning) {
+      waitForTaskDriversToFinish(task, maxWaitMicros);
+      std::rethrow_exception(task->error());
+    } else {
+      VELOX_FAIL(
+          "Failed to wait for task to complete after {}, task: {}",
+          succinctMicros(maxWaitMicros),
+          task->toString());
+    }
+  }
+  return {std::move(cursor), std::move(result)};
 }
 
 } // namespace facebook::velox::exec::test

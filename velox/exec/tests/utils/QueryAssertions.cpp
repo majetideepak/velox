@@ -1364,41 +1364,6 @@ bool testingMaybeTriggerAbort(exec::Task* task) {
   return false;
 }
 
-std::pair<std::unique_ptr<TaskCursor>, std::vector<RowVectorPtr>> readCursor(
-    const CursorParameters& params,
-    std::function<void(exec::Task*)> addSplits,
-    uint64_t maxWaitMicros) {
-  auto cursor = TaskCursor::create(params);
-  // 'result' borrows memory from cursor so the life cycle must be shorter.
-  std::vector<RowVectorPtr> result;
-  auto* task = cursor->task().get();
-  addSplits(task);
-
-  while (cursor->moveNext()) {
-    result.push_back(cursor->current());
-    addSplits(task);
-    testingMaybeTriggerAbort(task);
-  }
-
-  if (!waitForTaskCompletion(task, maxWaitMicros)) {
-    // NOTE: there is async memory arbitration might fail the task after all the
-    // results have been consumed and before the task finishes. So we might run
-    // into the failed task state in some rare case such as exposed by
-    // concurrent memory arbitration test.
-    if (task->state() != TaskState::kFinished &&
-        task->state() != TaskState::kRunning) {
-      waitForTaskDriversToFinish(task, maxWaitMicros);
-      std::rethrow_exception(task->error());
-    } else {
-      VELOX_FAIL(
-          "Failed to wait for task to complete after {}, task: {}",
-          succinctMicros(maxWaitMicros),
-          task->toString());
-    }
-  }
-  return {std::move(cursor), std::move(result)};
-}
-
 bool waitForTaskFinish(
     exec::Task* task,
     TaskState expectedState,

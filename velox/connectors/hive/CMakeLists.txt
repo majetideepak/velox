@@ -36,8 +36,8 @@ target_link_libraries(
   PRIVATE velox_common_io
           velox_connector
           velox_dwio_catalog_fbhive
-          velox_dwio_dwrf_reader
-          velox_dwio_dwrf_writer
+#          velox_dwio_dwrf_reader
+#          velox_dwio_dwrf_writer
           velox_dwio_parquet_reader
           velox_dwio_parquet_writer
           velox_file

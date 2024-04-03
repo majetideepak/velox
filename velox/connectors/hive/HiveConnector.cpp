@@ -21,6 +21,7 @@
 #include "velox/connectors/hive/HiveDataSink.h"
 #include "velox/connectors/hive/HiveDataSource.h"
 #include "velox/connectors/hive/HivePartitionFunction.h"
+#include "velox/dwio/common/Reader.h"
 // Meta's buck build system needs this check.
 #ifdef VELOX_ENABLE_GCS
 #include "velox/connectors/hive/storage_adapters/gcs/RegisterGCSFileSystem.h" // @manual
@@ -34,8 +35,6 @@
 #ifdef VELOX_ENABLE_ABFS
 #include "velox/connectors/hive/storage_adapters/abfs/RegisterAbfsFileSystem.h" // @manual
 #endif
-#include "velox/dwio/dwrf/reader/DwrfReader.h"
-#include "velox/dwio/dwrf/writer/Writer.h"
 // Meta's buck build system needs this check.
 #ifdef VELOX_ENABLE_PARQUET
 #include "velox/dwio/parquet/RegisterParquetReader.h" // @manual
@@ -47,7 +46,6 @@
 #include <memory>
 
 using namespace facebook::velox::exec;
-using namespace facebook::velox::dwrf;
 
 namespace facebook::velox::connector::hive {
 
@@ -132,8 +130,6 @@ std::unique_ptr<core::PartitionFunction> HivePartitionFunctionSpec::create(
 void HiveConnectorFactory::initialize() {
   [[maybe_unused]] static bool once = []() {
     dwio::common::registerFileSinks();
-    dwrf::registerDwrfReaderFactory();
-    dwrf::registerDwrfWriterFactory();
 // Meta's buck build system needs this check.
 #ifdef VELOX_ENABLE_PARQUET
     parquet::registerParquetReaderFactory();
