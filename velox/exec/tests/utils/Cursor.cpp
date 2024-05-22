@@ -47,7 +47,7 @@ bool waitForTaskStateChange(
   // Wait for task to transition to finished state.
   if (task->state() != state) {
     auto& executor = folly::QueuedImmediateExecutor::instance();
-    auto future = task->taskCompletionFuture(maxWaitMicros).via(&executor);
+    auto future = task->taskCompletionFuture().within(std::chrono::microseconds(maxWaitMicros)).via(&executor);
     future.wait();
   }
 
