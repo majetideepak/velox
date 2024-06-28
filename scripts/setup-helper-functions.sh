@@ -102,19 +102,19 @@ function get_cxx_flags {
   case $CPU_ARCH in
 
     "arm64")
-      echo -n "-mcpu=apple-m1+crc -std=c++17 -fvisibility=hidden $ADDITIONAL_FLAGS"
+      echo -n "-mcpu=apple-m1+crc -std=c++17"
     ;;
 
     "avx")
-      echo -n "-mavx2 -mfma -mavx -mf16c -mlzcnt -std=c++17 -mbmi2 $ADDITIONAL_FLAGS"
+      echo -n "-mavx2 -mfma -mavx -mf16c -mlzcnt -std=c++17 -mbmi2"
     ;;
 
     "sse")
-      echo -n "-msse4.2 -std=c++17 $ADDITIONAL_FLAGS"
+      echo -n "-msse4.2 -std=c++17"
     ;;
 
     "aarch64")
-      echo -n "-mcpu=neoverse-n1 -std=c++17 $ADDITIONAL_FLAGS"
+      echo -n "-mcpu=neoverse-n1 -std=c++17"
     ;;
   *)
     echo -n "Architecture not supported!"
