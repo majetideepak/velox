@@ -69,7 +69,7 @@ function github_checkout {
 #   avx:     Target Intel CPUs with AVX.
 #   sse:     Target Intel CPUs with sse.
 # Echo's the appropriate compiler flags which can be captured as so
-# CXX_FLAGS=$(get_cxx_flags) or
+# CXX_FLAGS=$(get_cxx_flags)
 
 function get_cxx_flags {
   local CPU_ARCH="avx"
@@ -96,7 +96,7 @@ function get_cxx_flags {
           CPU_ARCH="aarch64"
     fi
   else
-    echo "Unsupported platform $OS"; exit; 
+    echo "Unsupported platform $OS"; exit 1; 
   fi
 
   case $CPU_ARCH in
