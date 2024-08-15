@@ -128,11 +128,11 @@ option(VELOX_ENABLE_SPARK_FUNCTIONS "Build Spark SQL functions." ON)
 option(VELOX_ENABLE_EXPRESSION "Build expression." ON)
 option(
   VELOX_ENABLE_EXAMPLES
-  "Build examples. This will enable VELOX_ENABLE_EXPRESSION automatically." OFF)
+  "Build examples. This will enable VELOX_ENABLE_EXPRESSION automatically." ON)
 option(VELOX_ENABLE_SUBSTRAIT "Build Substrait-to-Velox converter." OFF)
 option(VELOX_ENABLE_BENCHMARKS "Enable Velox top level benchmarks." OFF)
 option(VELOX_ENABLE_BENCHMARKS_BASIC "Enable Velox basic benchmarks." OFF)
-option(VELOX_ENABLE_S3 "Build S3 Connector" OFF)
+option(VELOX_ENABLE_S3 "Build S3 Connector" ON)
 option(VELOX_ENABLE_GCS "Build GCS Connector" OFF)
 option(VELOX_ENABLE_ABFS "Build Abfs Connector" OFF)
 option(VELOX_ENABLE_HDFS "Build Hdfs Connector" OFF)

@@ -102,7 +102,7 @@ cmake-gpu:
 	$(MAKE) EXTRA_CMAKE_FLAGS="${EXTRA_CMAKE_FLAGS} -DVELOX_ENABLE_GPU=ON" cmake
 
 build:					#: Build the software based in BUILD_DIR and BUILD_TYPE variables
-	cmake --build $(BUILD_BASE_DIR)/$(BUILD_DIR) -j $(NUM_THREADS)
+	cmake --build $(BUILD_BASE_DIR)/$(BUILD_DIR) -j $(NUM_THREADS) --target=velox_example_storage_write
 
 debug:					#: Build with debugging symbols
 	$(MAKE) cmake BUILD_DIR=debug BUILD_TYPE=Debug
