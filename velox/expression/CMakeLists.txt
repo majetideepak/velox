@@ -34,6 +34,7 @@ velox_add_library(
   CoalesceExpr.cpp
   ConjunctExpr.cpp
   ConstantExpr.cpp
+  DynamicLibraryLoader.cpp
   EvalCtx.cpp
   Expr.cpp
   ExprCompiler.cpp
