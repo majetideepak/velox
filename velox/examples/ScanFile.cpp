@@ -14,46 +14,51 @@
  * limitations under the License.
  */
 
-#include <folly/init/Init.h>
 #include <algorithm>
+#include <gflags/gflags.h>
+#include <folly/init/Init.h>
 
 #include "velox/common/file/FileSystems.h"
 #include "velox/common/memory/Memory.h"
 #include "velox/dwio/common/Reader.h"
 #include "velox/dwio/common/ReaderFactory.h"
 #include "velox/dwio/dwrf/RegisterDwrfReader.h"
-#include "velox/exec/tests/utils/TempDirectoryPath.h"
-#include "velox/vector/BaseVector.h"
+#include "velox/dwio/parquet/RegisterParquetReader.h"
+
+DEFINE_string(data_format, "parquet", "Data format {orc, parquet}");
+
+DEFINE_string(data_path, "", "Data file path");
 
 using namespace facebook::velox;
 using namespace facebook::velox::dwio::common;
 using namespace facebook::velox::dwrf;
 
-// A temporary program that reads from ORC file and prints its content
-// Used to compare the ORC data read by DWRFReader against apache-orc repo.
-// Usage: velox_example_scan_orc {orc_file_path}
+// A temporary program that reads from data file and prints its content
+// Usage: velox_example_scan_file --data_format=parquet --data_path file_path
 int main(int argc, char** argv) {
-  folly::Init init{&argc, &argv};
-
-  if (argc < 2) {
-    return 1;
-  }
-
+  folly::Init init{&argc, &argv, false};
   // To be able to read local files, we need to register the local file
-  // filesystem. We also need to register the dwrf reader factory:
+  // filesystem. We also need to register the reader factories.
   filesystems::registerLocalFileSystem();
   dwrf::registerDwrfReaderFactory();
+  parquet::registerParquetReaderFactory();
   facebook::velox::memory::MemoryManager::initialize({});
   auto pool = facebook::velox::memory::memoryManager()->addLeafPool();
 
-  std::string filePath{argv[1]};
   dwio::common::ReaderOptions readerOpts{pool.get()};
-  // To make DwrfReader reads ORC file, setFileFormat to FileFormat::ORC
-  readerOpts.setFileFormat(FileFormat::ORC);
-  auto reader = dwio::common::getReaderFactory(FileFormat::ORC)
+  FileFormat format = FileFormat::PARQUET;
+  if (FLAGS_data_format == "orc") {
+    format = FileFormat::ORC;
+  } else if (FLAGS_data_format == "parquet") {
+    format = FileFormat::PARQUET;
+  } else {
+    VELOX_FAIL("Invalid data format {}", FLAGS_data_format);
+  }
+  readerOpts.setFileFormat(format);
+  auto reader = dwio::common::getReaderFactory(format)
                     ->createReader(
                         std::make_unique<BufferedInput>(
-                            std::make_shared<LocalReadFile>(filePath),
+                            std::make_shared<LocalReadFile>(FLAGS_data_path),
                             readerOpts.memoryPool()),
                         readerOpts);
 

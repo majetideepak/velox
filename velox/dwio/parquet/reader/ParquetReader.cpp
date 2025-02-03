@@ -955,11 +955,17 @@ class ParquetRowReader::Impl {
         options_.timestampPrecision());
     requestedType_ = options_.requestedType() ? options_.requestedType()
                                               : readerBase_->schema();
+    auto scanSpec = options_.scanSpec();
+    if (!scanSpec) {
+      scanSpec = std::make_shared<velox::common::ScanSpec>("");
+      scanSpec->addAllChildFields(*(readerBase_->schema()));
+      options_.setScanSpec(scanSpec);
+    }
     columnReader_ = ParquetColumnReader::build(
         requestedType_,
         readerBase_->schemaWithId(), // Id is schema id
         params,
-        *options_.scanSpec());
+        *scanSpec);
     columnReader_->setIsTopLevel();
 
     filterRowGroups();
@@ -1033,6 +1039,9 @@ class ParquetRowReader::Impl {
     }
     VELOX_DCHECK_GT(rowsToRead, 0);
     columnReader_->setCurrentRowNumber(nextRowNumber());
+    if (!result) {
+        result = BaseVector::create(requestedType_, 5000, &pool_);
+    }
     if (!options_.rowNumberColumnInfo().has_value()) {
       columnReader_->next(rowsToRead, result, mutation);
     } else {
@@ -1090,7 +1099,7 @@ class ParquetRowReader::Impl {
 
   memory::MemoryPool& pool_;
   const std::shared_ptr<ReaderBase> readerBase_;
-  const dwio::common::RowReaderOptions options_;
+  dwio::common::RowReaderOptions options_;
 
   // All row groups from file metadata.
   const std::vector<thrift::RowGroup>& rowGroups_;
