@@ -133,6 +133,7 @@ const char* PageReader::decompressData(
     const char* pageData,
     uint32_t compressedSize,
     uint32_t uncompressedSize) {
+  auto start = std::chrono::high_resolution_clock::now();
   std::unique_ptr<dwio::common::SeekableInputStream> inputStream =
       std::make_unique<dwio::common::SeekableArrayInputStream>(
           pageData, compressedSize, 0);
@@ -155,6 +156,11 @@ const char* PageReader::decompressData(
   decompressedStream->readFully(
       decompressedData_->asMutable<char>(), uncompressedSize);
 
+  auto end = std::chrono::high_resolution_clock::now();
+  auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
+  std::cout << "Decompressed Size:" << uncompressedSize <<
+               "Compressed Size:" << compressedSize <<
+               "Execution time: " << duration.count() << " microseconds" << std::endl;
   return decompressedData_->as<char>();
 }
 
