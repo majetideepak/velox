@@ -14,6 +14,22 @@
  * limitations under the License.
  */
 
+/// When GFlags are used, they must be translated to
+/// velox::GlobalConfig by invoking translateFlagsToGlobalConfig
 namespace facebook::velox {
 void translateFlagsToGlobalConfig();
 }
+
+/// Enable the stacktrace for user type of VeloxException
+DECLARE_bool(velox_exception_user_stacktrace_enabled);
+
+/// Enable the stacktrace for system type of VeloxException
+DECLARE_bool(velox_exception_system_stacktrace_enabled);
+
+/// Min time interval in milliseconds between stack traces captured in
+/// user type of VeloxException; off when set to 0 (the default)
+DECLARE_int32(velox_exception_user_stacktrace_rate_limit_ms);
+
+/// Min time interval in milliseconds between stack traces captured in
+/// system type of VeloxException; off when set to 0 (the default)
+DECLARE_int32(velox_exception_system_stacktrace_rate_limit_ms);
