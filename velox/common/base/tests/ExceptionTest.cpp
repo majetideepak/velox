@@ -85,7 +85,6 @@ void testExceptionTraceCollectionControl(bool userException, bool enabled) {
     FLAGS_velox_exception_system_stacktrace_enabled = enabled ? true : false;
     FLAGS_velox_exception_user_stacktrace_enabled = folly::Random::oneIn(2);
   }
-  translateFlagsToGlobalConfig();
   try {
     if (userException) {
       throw VeloxUserError(
@@ -126,7 +125,6 @@ void testExceptionTraceCollectionRateControl(
   // Enable trace rate control in the test.
   FLAGS_velox_exception_user_stacktrace_enabled = true;
   FLAGS_velox_exception_system_stacktrace_enabled = true;
-  translateFlagsToGlobalConfig();
   // Set rate control interval to a large value to avoid time related test
   // flakiness.
   const int kRateLimitIntervalMs = 4000;
@@ -150,7 +148,6 @@ void testExceptionTraceCollectionRateControl(
     FLAGS_velox_exception_user_stacktrace_rate_limit_ms =
         folly::Random::rand32();
   }
-  translateFlagsToGlobalConfig();
   for (int iter = 0; iter < 3; ++iter) {
     try {
       if (userException) {

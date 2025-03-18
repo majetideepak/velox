@@ -35,13 +35,11 @@ class MemoryCapExceededTest : public OperatorTestBase,
     // NOTE: if 'GetParam()' is true, then suppress the verbose error message in
     // memory capacity exceeded exception.
     FLAGS_velox_suppress_memory_capacity_exceeding_error_message = GetParam();
-    translateFlagsToGlobalConfig();
   }
 
   void TearDown() override {
     OperatorTestBase::TearDown();
     FLAGS_velox_suppress_memory_capacity_exceeding_error_message = false;
-    translateFlagsToGlobalConfig();
   }
 };
 
