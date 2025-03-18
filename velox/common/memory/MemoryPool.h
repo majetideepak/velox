@@ -24,13 +24,10 @@
 #include "velox/common/base/BitUtil.h"
 #include "velox/common/base/Exceptions.h"
 #include "velox/common/base/Portability.h"
+#include "velox/common/config/GlobalConfig.h"
 #include "velox/common/memory/Allocation.h"
 #include "velox/common/memory/MemoryAllocator.h"
 #include "velox/common/memory/MemoryArbitrator.h"
-
-DECLARE_bool(velox_memory_leak_check_enabled);
-DECLARE_bool(velox_memory_pool_debug_enabled);
-DECLARE_bool(velox_memory_pool_capacity_transfer_across_tasks);
 
 namespace facebook::velox::exec {
 class ParallelMemoryReclaimer;

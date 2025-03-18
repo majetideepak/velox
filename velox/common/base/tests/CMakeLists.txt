@@ -48,6 +48,7 @@ target_link_libraries(
     velox_status
     velox_exception
     velox_temp_path
+    velox_flag_definitions
     Boost::filesystem
     Boost::headers
     Folly::folly

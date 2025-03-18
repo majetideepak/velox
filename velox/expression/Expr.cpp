@@ -20,6 +20,7 @@
 #include "velox/common/base/Exceptions.h"
 #include "velox/common/base/Fs.h"
 #include "velox/common/base/SuccinctPrinter.h"
+#include "velox/common/config/GlobalConfig.h"
 #include "velox/common/process/ThreadDebugInfo.h"
 #include "velox/common/testutil/TestValue.h"
 #include "velox/expression/CastExpr.h"
@@ -34,11 +35,6 @@
 #include "velox/vector/LazyVector.h"
 #include "velox/vector/SelectivityVector.h"
 #include "velox/vector/VectorSaver.h"
-
-DECLARE_string(velox_save_input_on_expression_any_failure_path);
-DECLARE_string(velox_save_input_on_expression_system_failure_path);
-DECLARE_bool(force_eval_simplified);
-DECLARE_bool(velox_experimental_save_input_on_fatal_signal);
 
 namespace facebook::velox::exec {
 
@@ -251,9 +247,21 @@ void Expr::computeMetadata() {
   }
 
   // (1) Compute deterministic_.
+<<<<<<< HEAD
   // An expression is deterministic if it is a deterministic function call or
   // a special form, and all its inputs are also deterministic.
   deterministic_ = isCurrentFunctionDeterministic();
+=======
+  // An expression is deterministic if it is a deterministic function call or a
+  // special form, and all its inputs are also deterministic.
+  if (vectorFunction_) {
+    deterministic_ = vectorFunctionMetadata_.deterministic;
+  } else {
+    VELOX_CHECK(isSpecialForm());
+    deterministic_ = true;
+  }
+
+>>>>>>> aa82d44e8 (Use GlobalConfig and remove GFlags)
   for (auto& input : inputs_) {
     if (auto* lambda = input->as<LambdaExpr>()) {
       deterministic_ &= lambda->body()->isDeterministic();
@@ -279,9 +287,9 @@ void Expr::computeMetadata() {
       // cast, constant and fieldReference expressions act as vector functions
       // with default null behavior.
 
-      // If the function has default null behavior, the Expr propagates nulls
-      // if the set of fields null-propagating arguments depend on is a
-      // superset of the fields non null-propagating arguments depend on.
+      // If the function has default null behavior, the Expr propagates nulls if
+      // the set of fields null-propagating arguments depend on is a superset of
+      // the fields non null-propagating arguments depend on.
       std::unordered_set<FieldReference*> nullPropagating, nonNullPropagating;
       for (auto& input : inputs_) {
         if (input->propagatesNulls_) {
@@ -403,8 +411,8 @@ bool Expr::evalArgsDefaultNulls(
         auto newErrors = context.errors();
         assert(newErrors); // lint
         if (flatNulls) {
-          // There are both nulls and errors. Only a null with no error
-          // removes a row.
+          // There are both nulls and errors. Only a null with no error removes
+          // a row.
           auto errorNulls = newErrors->errorFlags();
           auto rowBits = rows.mutableRows().asMutableRange().bits();
           auto nwords = bits::nwords(rows.rows().end());
@@ -563,8 +571,8 @@ class ExprExceptionContext {
   /// Persist data and sql on disk. Data will be persisted in $basePath/vector
   /// and sql will be persisted in $basePath/sql
   void persistDataAndSql(const char* basePath) {
-    // Exception already persisted or failed to persist. We don't persist
-    // again in this situation.
+    // Exception already persisted or failed to persist. We don't persist again
+    // in this situation.
     if (!dataPath_.empty()) {
       return;
     }
@@ -665,8 +673,8 @@ class ExprExceptionContext {
   std::string sqlPath_;
 
   /// Path of the file storing the SQL for all expressions in the ExprSet that
-  /// was executing this expression. Useful if the bug that caused the error
-  /// was encountered due to some mutation from running the other expressions.
+  /// was executing this expression. Useful if the bug that caused the error was
+  /// encountered due to some mutation from running the other expressions.
   std::string allExprSqlPath_{"N/A"};
 };
 
@@ -691,9 +699,10 @@ std::string onTopLevelException(VeloxException::Type exceptionType, void* arg) {
   auto* context = static_cast<ExprExceptionContext*>(arg);
 
   const char* basePath =
-      FLAGS_velox_save_input_on_expression_any_failure_path.c_str();
+      config::globalConfig().saveInputOnExpressionAnyFailurePath.c_str();
   if (strlen(basePath) == 0 && exceptionType == VeloxException::Type::kSystem) {
-    basePath = FLAGS_velox_save_input_on_expression_system_failure_path.c_str();
+    basePath =
+        config::globalConfig().saveInputOnExpressionSystemFailurePath.c_str();
   }
   if (strlen(basePath) == 0) {
     return fmt::format("Top-level Expression: {}", context->expr()->toString());
@@ -764,8 +773,8 @@ void Expr::evalFlatNoNullsImpl(
   inputValues_.resize(inputs_.size());
   for (int32_t i = 0; i < inputs_.size(); ++i) {
     if (constantInputs_[i]) {
-      // No need to re-evaluate constant expression. Simply move constant
-      // values from constantInputs_.
+      // No need to re-evaluate constant expression. Simply move constant values
+      // from constantInputs_.
       inputValues_[i] = std::move(constantInputs_[i]);
       inputValues_[i]->resize(rows.end());
     } else {
@@ -796,8 +805,8 @@ void Expr::eval(
     return;
   }
 
-  // Make sure to include current expression in the error message in case of
-  // an exception.
+  // Make sure to include current expression in the error message in case of an
+  // exception.
   ExprExceptionContext exprExceptionContext{this, context.row(), parentExprSet};
   ExceptionContextSetter exceptionContext(
       {.messageFunc = parentExprSet ? onTopLevelException : onException,
@@ -821,18 +830,17 @@ void Expr::eval(
   // peeling and wrapping in the sub-nodes.
   //
   // Also load fields referenced by shared sub expressions to ensure that if
-  // there is an encoding on the loaded vector, then it is always peeled
-  // before evaluating sub-expression. Otherwise, the first call to
-  // evaluateSharedSubexpr might pass rows before peeling and the next one
-  // pass rows after peeling.
+  // there is an encoding on the loaded vector, then it is always peeled before
+  // evaluating sub-expression. Otherwise, the first call to
+  // evaluateSharedSubexpr might pass rows before peeling and the next one pass
+  // rows after peeling.
   //
   // Finally, for non-null propagating expressions, load multiply referenced
-  // inputs unconditionally as it is hard to keep track of the superset of
-  // rows that would end up being evaluated among all its children (and hence
-  // need to be loaded). This is because any of the children might have null
-  // propagating expressions that end up operating on a reduced set of rows.
-  // So, one sub tree might need only a subset, whereas other might need a
-  // different subset.
+  // inputs unconditionally as it is hard to keep track of the superset of rows
+  // that would end up being evaluated among all its children (and hence need to
+  // be loaded). This is because any of the children might have null propagating
+  // expressions that end up operating on a reduced set of rows. So, one sub
+  // tree might need only a subset, whereas other might need a different subset.
   //
   // TODO: Re-work the logic of deciding when to load which field.
   if (context.lazyDereference()) {
@@ -847,10 +855,10 @@ void Expr::eval(
     }
   } else if (
       !propagatesNulls_ && !evaluatesArgumentsOnNonIncreasingSelection()) {
-    // Load multiply-referenced fields at common parent expr with "rows".
-    // Delay loading fields that are not in multiplyReferencedFields_.  In
-    // case evaluatesArgumentsOnNonIncreasingSelection() is true, this is
-    // delayed until we process the inputs of ConjunctExpr.
+    // Load multiply-referenced fields at common parent expr with "rows".  Delay
+    // loading fields that are not in multiplyReferencedFields_.  In case
+    // evaluatesArgumentsOnNonIncreasingSelection() is true, this is delayed
+    // until we process the inputs of ConjunctExpr.
     for (const auto& field : multiplyReferencedFields_) {
       context.ensureFieldLoaded(field->index(context), rows);
     }
@@ -953,8 +961,8 @@ void Expr::evaluateSharedSubexpr(
   VELOX_DCHECK(missingRows->hasSelections());
 
   // Fix finalSelection to avoid losing values outside missingRows.
-  // Final selection of rows need to include sharedSubexprRows_, missingRows
-  // and current final selection of rows if set.
+  // Final selection of rows need to include sharedSubexprRows_, missingRows and
+  // current final selection of rows if set.
   LocalSelectivityVector newFinalSelectionHolder(context, *sharedSubexprRows);
   auto* newFinalSelection = newFinalSelectionHolder.get();
   newFinalSelection->select(*missingRows);
@@ -1005,9 +1013,9 @@ Expr::PeelEncodingsResult Expr::peelEncodings(
 
   // Prepare the rows and vectors to peel.
 
-  // Use finalSelection to generate peel to ensure those rows can be
-  // translated and ensure consistent peeling across multiple calls to this
-  // expression if its a shared subexpression.
+  // Use finalSelection to generate peel to ensure those rows can be translated
+  // and ensure consistent peeling across multiple calls to this expression if
+  // its a shared subexpression.
   const auto& rowsToPeel =
       context.isFinalSelection() ? rows : *context.finalSelection();
   [[maybe_unused]] auto numFields = context.row()->childrenSize();
@@ -1150,8 +1158,8 @@ bool Expr::removeSureNulls(
   }
   if (result) {
     result->updateBounds();
-    // Default-null behavior has taken place if some sure nulls has been
-    // removed from rows.
+    // Default-null behavior has taken place if some sure nulls has been removed
+    // from rows.
     if (result->countSelected() < rows.countSelected()) {
       stats_.defaultNullRowsSkipped = true;
       return true;
@@ -1208,11 +1216,11 @@ void Expr::evalWithNulls(
 }
 
 // Optimization that attempts to cache results for inputs that are dictionary
-// encoded and use the same base vector between subsequent input batches.
-// Since this hold onto a reference to the base vector and the cached results,
-// it can be memory intensive. Therefore in order to reduce this consumption
-// and ensure it is only employed for cases where it can be useful, it only
-// starts caching result after it encounters the same base at least twice.
+// encoded and use the same base vector between subsequent input batches. Since
+// this hold onto a reference to the base vector and the cached results, it can
+// be memory intensive. Therefore in order to reduce this consumption and ensure
+// it is only employed for cases where it can be useful, it only starts caching
+// result after it encounters the same base at least twice.
 void Expr::evalWithMemo(
     const SelectivityVector& rows,
     EvalCtx& context,
@@ -1460,8 +1468,8 @@ void Expr::evalAllImpl(
   bool tryPeelArgs = isCurrentFunctionDeterministic();
   bool defaultNulls = vectorFunctionMetadata_.defaultNullBehavior;
 
-  // Tracks what subset of rows shall un-evaluated inputs and current
-  // expression evaluates. Initially points to rows.
+  // Tracks what subset of rows shall un-evaluated inputs and current expression
+  // evaluates. Initially points to rows.
   MutableRemainingRows remainingRows(rows, context);
   if (defaultNulls) {
     if (!evalArgsDefaultNulls(
@@ -1536,9 +1544,9 @@ bool Expr::applyFunctionWithPeeling(
   peeledVectors.clear();
 
   // Translate the relevant rows.
-  // Note: We do not need to translate final selection since at this stage
-  // those rows are not used but isFinalSelection() is only used to check
-  // whether pre-existing rows need to be preserved.
+  // Note: We do not need to translate final selection since at this stage those
+  // rows are not used but isFinalSelection() is only used to check whether
+  // pre-existing rows need to be preserved.
   auto newRows = peeledEncoding->translateToInnerRows(applyRows, newRowsHolder);
 
   withContextSaver([&](ContextSaver& saver) {
@@ -1553,9 +1561,9 @@ bool Expr::applyFunctionWithPeeling(
         this->type(), context.pool(), peeledResult, applyRows);
     context.moveOrCopyResult(wrappedResult, applyRows, result);
 
-    // Recycle peeledResult if it's not owned by the result vector. Examples
-    // of when this can happen is when the result is a primitive constant
-    // vector, or when moveOrCopyResult copies wrappedResult content.
+    // Recycle peeledResult if it's not owned by the result vector. Examples of
+    // when this can happen is when the result is a primitive constant vector,
+    // or when moveOrCopyResult copies wrappedResult content.
     context.releaseVector(peeledResult);
   });
 
@@ -1718,8 +1726,8 @@ common::Subfield extractSubfield(
   for (;;) {
     if (auto* ref = expr->as<FieldReference>()) {
       const auto& name = ref->name();
-      // When the field name is empty string, it typically means that the
-      // field name was not set in the parent type.
+      // When the field name is empty string, it typically means that the field
+      // name was not set in the parent type.
       if (name == "") {
         expr = expr->inputs()[0].get();
         continue;
@@ -1947,9 +1955,10 @@ void printInputAndExprs(
     const BaseVector* vector,
     const std::vector<std::shared_ptr<Expr>>& exprs) {
   const char* basePath =
-      FLAGS_velox_save_input_on_expression_any_failure_path.c_str();
+      config::globalConfig().saveInputOnExpressionAnyFailurePath.c_str();
   if (strlen(basePath) == 0) {
-    basePath = FLAGS_velox_save_input_on_expression_system_failure_path.c_str();
+    basePath =
+        config::globalConfig().saveInputOnExpressionSystemFailurePath.c_str();
   }
   if (strlen(basePath) == 0) {
     return;
@@ -2012,7 +2021,7 @@ void ExprSet::eval(
     }
   }
 
-  if (FLAGS_velox_experimental_save_input_on_fatal_signal) {
+  if (config::globalConfig().experimentalSaveInputOnFatalSignal) {
     auto other = process::GetThreadDebugInfo();
     process::ThreadDebugInfo debugInfo;
     if (other) {
@@ -2076,7 +2085,7 @@ std::unique_ptr<ExprSet> makeExprSetFromFlag(
     core::ExecCtx* execCtx,
     bool lazyDereference) {
   if (execCtx->queryCtx()->queryConfig().exprEvalSimplified() ||
-      FLAGS_force_eval_simplified) {
+      config::globalConfig().forceEvalSimplified) {
     return std::make_unique<ExprSetSimplified>(std::move(source), execCtx);
   }
   return std::make_unique<ExprSet>(
