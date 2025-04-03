@@ -28,10 +28,6 @@
 
 constexpr const char* kProcSelfCmdline = "/proc/self/cmdline";
 
-DECLARE_bool(avx2); // Enables use of AVX2 when available NOLINT
-
-DECLARE_bool(bmi2); // Enables use of BMI2 when available NOLINT
-
 namespace facebook {
 namespace velox {
 namespace process {
@@ -110,7 +106,7 @@ bool avx2CpuFlag = folly::CpuId().avx2();
 
 bool hasAvx2() {
 #ifdef __AVX2__
-  return avx2CpuFlag && FLAGS_avx2;
+  return avx2CpuFlag && globalConfig().useAvx2;
 #else
   return false;
 #endif
@@ -118,7 +114,7 @@ bool hasAvx2() {
 
 bool hasBmi2() {
 #ifdef __BMI2__
-  return bmi2CpuFlag && FLAGS_bmi2;
+  return bmi2CpuFlag && globalConfig().useBmi2;
 #else
   return false;
 #endif

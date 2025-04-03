@@ -14,9 +14,16 @@
  * limitations under the License.
  */
 
-namespace facebook::velox {
-void translateFlagsToGlobalConfig();
-}
+#include <gflags/gflags.h>
+
+// Used in velox/common/memory/Memory.cpp
+
+/// Number of shared leaf memory pools per process.
+DECLARE_int32(velox_memory_num_shared_leaf_pools);
+
+/// Enable memory usage tracking in the default memory pool.
+/// For debugging only. Can cause performance regression.
+DECLARE_bool(velox_enable_memory_usage_track_in_default_memory_pool);
 
 /// Use O_DIRECT for SSD cache I/O. This allows to bypass Linux Kernel's page
 /// cache and can improve performance on some filesystems. Disable if the
@@ -27,3 +34,6 @@ DECLARE_bool(velox_ssd_odirect);
 /// read back and is compared against the entry written.
 /// This is helpful to protect against SSD write corruption.
 DECLARE_bool(velox_ssd_verify_write);
+
+/// Use WS VRead API to load.
+DECLARE_bool(wsVRLoad);

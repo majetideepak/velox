@@ -21,9 +21,6 @@
 #include "velox/dwio/common/SeekableInputStream.h"
 #include "velox/dwio/common/StreamIdentifier.h"
 
-// Use WS VRead API to load
-DECLARE_bool(wsVRLoad);
-
 namespace facebook::velox::dwio::common {
 
 class BufferedInput {

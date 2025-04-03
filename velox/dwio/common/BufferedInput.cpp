@@ -19,9 +19,8 @@
 #include <utility>
 
 #include "folly/io/Cursor.h"
+#include "velox/common/config/GlobalConfig.h"
 #include "velox/dwio/common/BufferedInput.h"
-
-DEFINE_bool(wsVRLoad, false, "Use WS VRead API to load");
 
 using ::facebook::velox::common::Region;
 
@@ -129,7 +128,7 @@ bool BufferedInput::useVRead() const {
   // to wsVRLoad=true we may change the value of this GFLAG programatically from
   // a config update so we can rollback fast from config without the need of a
   // deployment
-  return wsVRLoad_.value_or(FLAGS_wsVRLoad);
+  return wsVRLoad_.value_or(globalConfig().);
 }
 
 // Sort regions and enqueuedToOffset in the same way

@@ -16,10 +16,6 @@
 
 #include <gflags/gflags.h>
 
-#include "velox/common/config/GlobalConfig.h"
-
-// Used in velox/common/memory/Memory.cpp
-
 DEFINE_int32(
     velox_memory_num_shared_leaf_pools,
     32,
@@ -30,7 +26,47 @@ DEFINE_bool(
     false,
     "Record time and volume for large allocation/free");
 
+// TODO: deprecate this once all the memory leak issues have been fixed in
+// existing meta internal use cases.
+DEFINE_bool(
+    velox_memory_leak_check_enabled,
+    false,
+    "If true, check fails on any memory leaks in memory pool and memory manager");
+
+DEFINE_bool(
+    velox_memory_pool_debug_enabled,
+    false,
+    "If true, 'MemoryPool' will be running in debug mode to track the allocation and free call sites to detect the source of memory leak for testing purpose");
+
+// TODO: deprecate this after solves all the use cases that can cause
+// significant performance regression by memory usage tracking.
+DEFINE_bool(
+    velox_enable_memory_usage_track_in_default_memory_pool,
+    false,
+    "If true, enable memory usage tracking in the default memory pool");
+
+DEFINE_bool(
+    velox_suppress_memory_capacity_exceeding_error_message,
+    false,
+    "If true, suppress the verbose error message in memory capacity exceeded "
+    "exception. This is only used by test to control the test error output size");
+
+DEFINE_bool(velox_memory_use_hugepages, true, "Use explicit huge pages");
+
+DEFINE_bool(
+    velox_memory_pool_capacity_transfer_across_tasks,
+    false,
+    "Whether allow to memory capacity transfer between memory pools from "
+    "different tasks, which might happen in use case like Spark-Gluten");
+
+// Used in common/base/ProcessBase.cpp
+
+DEFINE_bool(avx2, true, "Enables use of AVX2 when available");
+
+DEFINE_bool(bmi2, true, "Enables use of BMI2 when available");
+
 // Used in common/base/VeloxException.cpp
+
 DEFINE_bool(
     velox_exception_user_stacktrace_enabled,
     false,
@@ -52,12 +88,6 @@ DEFINE_int32(
     0, // effectively turns off rate-limiting
     "Min time interval in milliseconds between stack traces captured in"
     " system type of VeloxException; off when set to 0 (the default)");
-
-// Used in common/base/ProcessBase.cpp
-
-DEFINE_bool(avx2, true, "Enables use of AVX2 when available");
-
-DEFINE_bool(bmi2, true, "Enables use of BMI2 when available");
 
 // Used in exec/Expr.cpp
 
@@ -95,39 +125,6 @@ DEFINE_bool(
     "'velox_save_input_on_expression_any_failure_path' or "
     "'velox_save_input_on_expression_system_failure_path'");
 
-// TODO: deprecate this once all the memory leak issues have been fixed in
-// existing meta internal use cases.
-DEFINE_bool(
-    velox_memory_leak_check_enabled,
-    false,
-    "If true, check fails on any memory leaks in memory pool and memory manager");
-
-DEFINE_bool(
-    velox_memory_pool_debug_enabled,
-    false,
-    "If true, 'MemoryPool' will be running in debug mode to track the allocation and free call sites to detect the source of memory leak for testing purpose");
-
-// TODO: deprecate this after solves all the use cases that can cause
-// significant performance regression by memory usage tracking.
-DEFINE_bool(
-    velox_enable_memory_usage_track_in_default_memory_pool,
-    false,
-    "If true, enable memory usage tracking in the default memory pool");
-
-DEFINE_bool(
-    velox_suppress_memory_capacity_exceeding_error_message,
-    false,
-    "If true, suppress the verbose error message in memory capacity exceeded "
-    "exception. This is only used by test to control the test error output size");
-
-DEFINE_bool(velox_memory_use_hugepages, true, "Use explicit huge pages");
-
-DEFINE_bool(
-    velox_memory_pool_capacity_transfer_across_tasks,
-    false,
-    "Whether allow to memory capacity transfer between memory pools from "
-    "different tasks, which might happen in use case like Spark-Gluten");
-
 DEFINE_int32(
     cache_prefetch_min_pct,
     80,
@@ -140,11 +137,14 @@ DEFINE_bool(
     false,
     "Read back data after writing to SSD");
 
+<<<<<<< HEAD
 // Used in /connectors/tpch
 DEFINE_int32(
     velox_tpch_text_pool_size_mb,
     300,
     "TPC-H DBGen text pool size in MB");
+
+DEFINE_bool(wsVRLoad, false, "Use WS VRead API to load");
 
 namespace facebook::velox {
 void translateFlagsToGlobalConfig() {

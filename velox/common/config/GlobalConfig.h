@@ -85,6 +85,12 @@ struct GlobalConfiguration {
   /// immediately read back and is compared against the entry written. This is
   /// helpful to protect against SSD write corruption.
   bool verifySsdWrite{false};
+  /// Use WS VRead API to load.
+  bool wsVRLoad{false};
+  /// Enables use of AVX2 when available.
+  bool useAvx2{true};
+  /// Enables use of BMI2 when available.
+  bool useBmi2{true};
 };
 
 GlobalConfiguration& globalConfig();
