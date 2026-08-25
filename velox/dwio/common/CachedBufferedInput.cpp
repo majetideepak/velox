@@ -655,6 +655,28 @@ std::unique_ptr<SeekableInputStream> CachedBufferedInput::read(
   return stream;
 }
 
+std::unique_ptr<SeekableInputStream> CachedBufferedInput::readWithSsdPriority(
+    uint64_t offset,
+    uint64_t length) const {
+  VELOX_CHECK_LE(offset + length, fileSize_);
+  auto stream = std::make_unique<CacheInputStream>(
+      const_cast<CachedBufferedInput*>(this),
+      ioStatistics_.get(),
+      Region{offset, length},
+      input_,
+      fileNum_.id(),
+      options_.cacheable(),
+      nullptr,
+      TrackingId(),
+      0,
+      options_.loadQuantum(),
+      /*ssdSavePriority=*/true);
+  if (preloaded()) {
+    stream->setPreloadedPin(preloadPin_);
+  }
+  return stream;
+}
+
 bool CachedBufferedInput::prefetch(Region region) {
   const int32_t numPages = memory::AllocationTraits::numPages(region.length);
   if (!shouldPreload(numPages)) {

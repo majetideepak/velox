@@ -102,6 +102,16 @@ class IoStatistics {
     return coalescedStorageLoadLatencyUs_;
   }
 
+  /// Footer reads served from SSD cache.
+  IoCounter& footerSsdRead() {
+    return footerSsdRead_;
+  }
+
+  /// Footer reads fetched from remote storage.
+  IoCounter& footerRead() {
+    return footerRead_;
+  }
+
   /// Distribution of gaps (in bytes) between consecutive read regions
   /// before coalescing. Measures data locality on disk.
   IoCounter& readGap() {
@@ -177,6 +187,12 @@ class IoStatistics {
 
   // Gap between consecutive read regions before coalescing.
   IoCounter readGap_;
+
+  // Footer reads served from SSD cache.
+  IoCounter footerSsdRead_;
+
+  // Footer reads fetched from remote storage.
+  IoCounter footerRead_;
 
   std::unordered_map<std::string, OperationCounters> operationStats_;
   mutable std::mutex operationStatsMutex_;

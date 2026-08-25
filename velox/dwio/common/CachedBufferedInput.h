@@ -137,6 +137,13 @@ class CachedBufferedInput : public BufferedInput {
   std::unique_ptr<SeekableInputStream>
   read(uint64_t offset, uint64_t length, LogType logType) const override;
 
+  /// Like read() but marks the resulting cache entry as high priority for SSD
+  /// save. Use for metadata (e.g., Parquet footers) that is small, expensive
+  /// to re-fetch, and at risk of eviction before normal SSD thresholds are met.
+  std::unique_ptr<SeekableInputStream> readWithSsdPriority(
+      uint64_t offset,
+      uint64_t length) const;
+
   /// Schedules load of 'region' on 'executor_'. Fails silently if no memory or
   /// if shouldPreload() is false.
   bool prefetch(velox::common::Region region);

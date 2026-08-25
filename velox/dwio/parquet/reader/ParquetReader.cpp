@@ -23,6 +23,7 @@
 #include <thrift/lib/cpp2/FieldRef.h>
 
 #include "velox/common/Casts.h"
+#include "velox/dwio/common/CachedBufferedInput.h"
 #include "velox/dwio/common/ParquetFieldId.h"
 #include "velox/dwio/common/StatisticsBuilder.h"
 #include "velox/dwio/parquet/common/ParquetRuntimeStats.h"
@@ -433,8 +434,15 @@ void ReaderBase::loadFileMetaData() {
   if (preloadFile) {
     stream = input_->loadCompleteFile();
   } else {
-    stream = input_->read(
-        fileLength_ - readSize, readSize, dwio::common::LogType::FOOTER);
+    auto* cachedInput =
+        dynamic_cast<dwio::common::CachedBufferedInput*>(input_.get());
+    if (cachedInput != nullptr) {
+      stream =
+          cachedInput->readWithSsdPriority(fileLength_ - readSize, readSize);
+    } else {
+      stream = input_->read(
+          fileLength_ - readSize, readSize, dwio::common::LogType::FOOTER);
+    }
   }
 
   std::vector<char> copy(readSize);
@@ -458,10 +466,17 @@ void ReaderBase::loadFileMetaData() {
   if (footerLength > readSize - 8) {
     footerOffsetInBuffer = 0;
     auto missingLength = footerLength - readSize + 8;
-    stream = input_->read(
-        fileLength_ - footerLength - 8,
-        missingLength,
-        dwio::common::LogType::FOOTER);
+    auto* cachedInput =
+        dynamic_cast<dwio::common::CachedBufferedInput*>(input_.get());
+    if (cachedInput != nullptr) {
+      stream = cachedInput->readWithSsdPriority(
+          fileLength_ - footerLength - 8, missingLength);
+    } else {
+      stream = input_->read(
+          fileLength_ - footerLength - 8,
+          missingLength,
+          dwio::common::LogType::FOOTER);
+    }
     copy.resize(footerLength);
     std::memmove(copy.data() + missingLength, copy.data(), readSize - 8);
     bufferStart = nullptr;

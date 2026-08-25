@@ -73,7 +73,9 @@ void AsyncDataCacheEntry::freeData() {
   size_ = 0;
 }
 
-void AsyncDataCacheEntry::setExclusiveToShared(bool ssdSavable) {
+void AsyncDataCacheEntry::setExclusiveToShared(
+    bool ssdSavable,
+    bool ssdSavePriority) {
   VELOX_CHECK(isExclusive());
   numPins_ = 1;
   std::unique_ptr<folly::SharedPromise<bool>> promise;
@@ -104,7 +106,11 @@ void AsyncDataCacheEntry::setExclusiveToShared(bool ssdSavable) {
   if ((ssdCache != nullptr) && (ssdFile_ == nullptr)) {
     if (ssdCache->groupStats().shouldSaveToSsd(groupId_, trackingId_)) {
       ssdSaveable_ = true;
+      ssdSavePriority_ = ssdSavePriority;
       shard_->cache()->possibleSsdSave(size_);
+      if (ssdSavePriority) {
+        shard_->cache()->possibleFooterSsdSave(size_);
+      }
     }
   }
 }
@@ -1096,10 +1102,24 @@ void AsyncDataCache::possibleSsdSave(uint64_t bytes) {
   }
 }
 
+void AsyncDataCache::possibleFooterSsdSave(uint64_t bytes) {
+  if (ssdCache_ == nullptr) {
+    return;
+  }
+  ssdFooterSaveable_ += bytes;
+  if (ssdFooterSaveable_ >= opts_.ssdFooterSaveThresholdBytes) {
+    if (!ssdCache_->startWrite()) {
+      return;
+    }
+    saveToSsd();
+  }
+}
+
 void AsyncDataCache::saveToSsd(bool saveAll) {
   std::vector<CachePin> pins;
   VELOX_CHECK(ssdCache_->writeInProgress());
   ssdSaveable_ = false;
+  ssdFooterSaveable_ = 0;
   for (auto& shard : shards_) {
     shard->appendSsdSaveable(saveAll, pins);
   }

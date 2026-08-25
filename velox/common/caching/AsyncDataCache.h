@@ -271,8 +271,11 @@ class AsyncDataCacheEntry {
   }
 
   /// If 'ssdSavable' is true, marks the loaded cache entry as ssdSavable if it
-  /// is not loaded from ssd.
-  void setExclusiveToShared(bool ssdSavable = true);
+  /// is not loaded from ssd. If 'ssdSavePriority' is true, the entry is also
+  /// marked as high priority for SSD save, triggering a lower flush threshold.
+  void setExclusiveToShared(
+      bool ssdSavable = true,
+      bool ssdSavePriority = false);
 
   void setSsdFile(SsdFile* file, uint64_t offset) {
     ssdFile_ = file;
@@ -290,6 +293,10 @@ class AsyncDataCacheEntry {
 
   bool ssdSaveable() const {
     return ssdSaveable_;
+  }
+
+  bool ssdSavePriority() const {
+    return ssdSavePriority_;
   }
 
   void setTrackingId(TrackingId id) {
@@ -386,6 +393,9 @@ class AsyncDataCacheEntry {
 
   // True if this should be saved to SSD.
   std::atomic<bool> ssdSaveable_{false};
+
+  // True if this entry is high priority for SSD save (e.g., file metadata).
+  std::atomic<bool> ssdSavePriority_{false};
 
   friend class CacheShard;
   friend class CachePin;
@@ -839,6 +849,11 @@ class AsyncDataCache : public memory::Cache {
     /// accumulated SSD-savable bytes exceed this value, a flush to SSD is
     /// triggered. Set to 0 to disable this threshold (default).
     uint64_t ssdFlushThresholdBytes;
+
+    /// Threshold in bytes for triggering SSD flush of footer entries. Much
+    /// lower than the normal threshold to ensure footers reach SSD before
+    /// eviction.
+    uint64_t ssdFooterSaveThresholdBytes = 256 * 1024;
   };
 
   AsyncDataCache(
@@ -957,6 +972,10 @@ class AsyncDataCache : public memory::Cache {
   /// triggers a background write of eligible entries to SSD.
   void possibleSsdSave(uint64_t bytes);
 
+  /// Like possibleSsdSave but for footer entries. Uses a lower threshold to
+  /// trigger earlier batched writes of footers to SSD.
+  void possibleFooterSsdSave(uint64_t bytes);
+
   /// Sets a callback applied to new entries at the point where
   ///  they are set to shared mode. Used for testing and can be used for
   /// e.g. checking checksums.
@@ -1047,6 +1066,9 @@ class AsyncDataCache : public memory::Cache {
 
   // Approximate counter tracking new entries that could be saved to SSD.
   tsan_atomic<uint64_t> ssdSaveable_{0};
+
+  // Approximate counter tracking footer entries pending SSD save.
+  tsan_atomic<uint64_t> ssdFooterSaveable_{0};
 
   CacheStats stats_;
 

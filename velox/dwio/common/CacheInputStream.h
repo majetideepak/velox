@@ -39,7 +39,8 @@ class CacheInputStream : public SeekableInputStream {
       std::shared_ptr<cache::ScanTracker> tracker,
       cache::TrackingId trackingId,
       uint64_t groupId,
-      int32_t loadQuantum);
+      int32_t loadQuantum,
+      bool ssdSavePriority = false);
 
   ~CacheInputStream() override;
 
@@ -76,7 +77,8 @@ class CacheInputStream : public SeekableInputStream {
         tracker_,
         trackingId_,
         groupId_,
-        loadQuantum_);
+        loadQuantum_,
+        ssdSavePriority_);
     copy->position_ = position_;
     if (preloaded_) {
       copy->setPreloadedPin(pin_);
@@ -156,6 +158,9 @@ class CacheInputStream : public SeekableInputStream {
   // Maximum number of bytes read from 'input' at a time. This gives the maximum
   // pin_.entry()->size().
   const int32_t loadQuantum_;
+
+  // True if this stream's cache entries are high priority for SSD save.
+  const bool ssdSavePriority_;
 
   IoStatistics* const ioStats_;
   const std::shared_ptr<ReadFileInputStream> input_;

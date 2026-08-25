@@ -38,7 +38,8 @@ CacheInputStream::CacheInputStream(
     std::shared_ptr<ScanTracker> tracker,
     TrackingId trackingId,
     uint64_t groupId,
-    int32_t loadQuantum)
+    int32_t loadQuantum,
+    bool ssdSavePriority)
     : bufferedInput_(bufferedInput),
       cache_(bufferedInput_->cache()),
       cacheable_(cacheable),
@@ -48,6 +49,7 @@ CacheInputStream::CacheInputStream(
       trackingId_(trackingId),
       groupId_(groupId),
       loadQuantum_(loadQuantum),
+      ssdSavePriority_(ssdSavePriority),
       ioStats_(ioStats),
       input_(std::move(input)) {}
 
@@ -230,6 +232,9 @@ void CacheInputStream::loadSync(const Region& region) {
     entry->setGroupId(groupId_);
     entry->setTrackingId(trackingId_);
     if (loadFromSsd(region, *entry)) {
+      if (ssdSavePriority_) {
+        ioStats_->footerSsdRead().increment(region.length);
+      }
       return;
     }
     const auto ranges = entry->dataRanges(region.length);
@@ -239,10 +244,13 @@ void CacheInputStream::loadSync(const Region& region) {
       input_->read(ranges, region.offset, LogType::FILE);
     }
     ioStats_->read().increment(region.length);
+    if (ssdSavePriority_) {
+      ioStats_->footerRead().increment(region.length);
+    }
     ioStats_->queryThreadIoLatencyUs().increment(storageReadUs);
     ioStats_->storageReadLatencyUs().increment(storageReadUs);
     ioStats_->incTotalScanTimeNs(storageReadUs * 1'000);
-    entry->setExclusiveToShared(cacheable_);
+    entry->setExclusiveToShared(cacheable_, ssdSavePriority_);
   } while (pin_.empty());
 }
 
