@@ -222,6 +222,9 @@ void CacheInputStream::loadSync(const Region& region) {
     if (!entry->getAndClearFirstUseFlag()) {
       // Hit memory cache.
       ioStats_->ramHit().increment(hitSize);
+      if (ssdSavePriority_) {
+        ioStats_->footerRamHit().increment(hitSize);
+      }
     }
     if (!entry->isExclusive()) {
       return;

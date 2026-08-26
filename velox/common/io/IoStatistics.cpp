@@ -140,6 +140,7 @@ void IoStatistics::merge(const IoStatistics& other) {
   coalescedSsdLoadLatencyUs_.merge(other.coalescedSsdLoadLatencyUs_);
   coalescedStorageLoadLatencyUs_.merge(other.coalescedStorageLoadLatencyUs_);
   readGap_.merge(other.readGap_);
+  footerRamHit_.merge(other.footerRamHit_);
   footerSsdRead_.merge(other.footerSsdRead_);
   footerRead_.merge(other.footerRead_);
   {

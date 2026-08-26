@@ -102,6 +102,11 @@ class IoStatistics {
     return coalescedStorageLoadLatencyUs_;
   }
 
+  /// Footer reads served from RAM cache.
+  IoCounter& footerRamHit() {
+    return footerRamHit_;
+  }
+
   /// Footer reads served from SSD cache.
   IoCounter& footerSsdRead() {
     return footerSsdRead_;
@@ -187,6 +192,9 @@ class IoStatistics {
 
   // Gap between consecutive read regions before coalescing.
   IoCounter readGap_;
+
+  // Footer reads served from RAM cache.
+  IoCounter footerRamHit_;
 
   // Footer reads served from SSD cache.
   IoCounter footerSsdRead_;

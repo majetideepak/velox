@@ -156,6 +156,27 @@ void addIoStatsToRuntimeStats(
       key(FileDataSource::kReadGapBytes),
       RuntimeCounter::Unit::kBytes,
       res);
+  addIoCounterMetric(
+      ioStats.footerRamHit(), key(FileDataSource::kNumFooterRamRead), res);
+  addIoStatsMetric(
+      ioStats.footerRamHit(),
+      key(FileDataSource::kFooterRamReadBytes),
+      RuntimeCounter::Unit::kBytes,
+      res);
+  addIoCounterMetric(
+      ioStats.footerSsdRead(), key(FileDataSource::kNumFooterLocalRead), res);
+  addIoStatsMetric(
+      ioStats.footerSsdRead(),
+      key(FileDataSource::kFooterLocalReadBytes),
+      RuntimeCounter::Unit::kBytes,
+      res);
+  addIoCounterMetric(
+      ioStats.footerRead(), key(FileDataSource::kNumFooterStorageRead), res);
+  addIoStatsMetric(
+      ioStats.footerRead(),
+      key(FileDataSource::kFooterStorageReadBytes),
+      RuntimeCounter::Unit::kBytes,
+      res);
 }
 
 } // namespace
