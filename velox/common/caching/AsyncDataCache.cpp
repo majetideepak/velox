@@ -573,6 +573,13 @@ uint64_t CacheShard::evict(
         if (candidate->ssdSaveable()) {
           ++numSavableEvict_;
         }
+        if (candidate->ssdSavePriority()) {
+          LOG(WARNING) << "Evicting footer cache entry: fileNum="
+                       << candidate->key_.fileNum.id() << " file="
+                       << fileIds().string(candidate->key_.fileNum.id())
+                       << " offset=" << candidate->offset()
+                       << " size=" << candidate->size() << " score=" << score;
+        }
         acquireEvictedData(
             candidate,
             bytesToAcquire,

@@ -99,9 +99,12 @@ void FooterPrefetchListener::onAddSplit(
       entry->setGroupId(fileHandle->groupId.id());
 
       const auto ranges = entry->dataRanges(readSize);
-      fileHandle->file->preadv(ranges, offset);
+      fileHandle->file->preadv(offset, ranges);
       entry->setExclusiveToShared(
           /*ssdSavable=*/true, /*ssdSavePriority=*/true);
+      LOG(INFO) << "Footer prefetch stored: fileNum=" << fileNum
+                << " file=" << filePath << " offset=" << offset
+                << " size=" << readSize;
     } catch (const std::exception&) {
       // Footer prefetch is best-effort. If it fails, the normal reader
       // path will fetch the footer synchronously.
