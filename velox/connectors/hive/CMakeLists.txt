@@ -35,6 +35,7 @@ velox_add_library(
   FileDataSource.cpp
   FileIndexReader.cpp
   FileSplitReader.cpp
+  FooterPrefetchListener.cpp
   HiveConfig.cpp
   HiveConfigProvider.cpp
   HiveConnector.cpp
@@ -62,6 +63,7 @@ velox_add_library(
   FileProperties.h
   FileSplitReader.h
   FileTableHandle.h
+  FooterPrefetchListener.h
   HiveConfig.h
   HiveConfigMacrosDefine.h
   HiveConfigMacrosUndef.h

@@ -16,6 +16,7 @@
 
 #include "velox/connectors/hive/HiveConnector.h"
 
+#include "velox/connectors/hive/FooterPrefetchListener.h"
 #include "velox/connectors/hive/HiveConfig.h"
 #include "velox/connectors/hive/HiveConfigProvider.h"
 #include "velox/connectors/hive/HiveDataSink.h"
@@ -54,6 +55,19 @@ HiveConnector::HiveConnector(
   } else {
     LOG(INFO) << "Hive connector " << connectorId()
               << " created with file handle cache disabled";
+  }
+
+  // Register footer prefetch listener if we have a cache and IO executor.
+  auto* cache = cache::AsyncDataCache::getInstance();
+  if (cache != nullptr && ioExecutor_ != nullptr) {
+    constexpr uint64_t kDefaultFooterSpeculativeIoSize = 256 * 1024;
+    footerPrefetchListenerFactory_ =
+        std::make_shared<FooterPrefetchListenerFactory>(
+            cache,
+            &fileHandleFactory_,
+            ioExecutor_,
+            kDefaultFooterSpeculativeIoSize);
+    exec::registerSplitListenerFactory(footerPrefetchListenerFactory_);
   }
 }
 

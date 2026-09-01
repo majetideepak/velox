@@ -26,6 +26,10 @@ class DataSink;
 class DataSource;
 } // namespace facebook::velox::dwio::common
 
+namespace facebook::velox::exec {
+class SplitListenerFactory;
+} // namespace facebook::velox::exec
+
 namespace facebook::velox::connector::hive {
 
 class HiveConnector : public Connector {
@@ -91,6 +95,7 @@ class HiveConnector : public Connector {
   HiveConfigProvider configProvider_;
   FileHandleFactory fileHandleFactory_;
   folly::Executor* ioExecutor_;
+  std::shared_ptr<exec::SplitListenerFactory> footerPrefetchListenerFactory_;
 };
 
 class HiveConnectorFactory : public ConnectorFactory {
