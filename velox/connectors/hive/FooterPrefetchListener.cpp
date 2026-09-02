@@ -61,22 +61,28 @@ void FooterPrefetchListener::onAddSplit(
   }
 
   const auto readSize = std::min(speculativeIoSize_, fileSize);
-  const auto offset = fileSize - readSize;
+  const auto splitOffset = fileSize - readSize;
 
   // Schedule the footer read on the IO executor. Capture by value so the
   // lambda outlives this call.
   const auto filePath = fileSplit->filePath;
+  const auto speculativeIoSize = speculativeIoSize_;
   ioExecutor_->add([cache = cache_,
                     fileHandleFactory = fileHandleFactory_,
                     filePath,
-                    offset,
-                    readSize]() {
+                    speculativeIoSize]() {
     try {
       auto fileHandle = fileHandleFactory->generate(
           FileHandleKey{filePath}, nullptr, nullptr);
       if (!fileHandle.get()) {
         return;
       }
+
+      // Use the actual file size from ReadFile to match what the reader
+      // will use in ReaderBase::loadFileMetaData().
+      const auto actualFileSize = fileHandle->file->size();
+      const auto readSize = std::min(speculativeIoSize, actualFileSize);
+      const auto offset = actualFileSize - readSize;
 
       const auto fileNum = fileHandle->uuid.id();
       cache::RawFileCacheKey key{fileNum, offset};
