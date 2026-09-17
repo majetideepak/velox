@@ -178,6 +178,10 @@ void addIoStatsToRuntimeStats(
       key(FileDataSource::kReadGapBytes),
       RuntimeCounter::Unit::kBytes,
       res);
+  addIoCounterMetric(
+      ioStats.prefetchHit(), key(FileDataSource::kNumPrefetchHit), res);
+  addIoCounterMetric(
+      ioStats.prefetchMiss(), key(FileDataSource::kNumPrefetchMiss), res);
 }
 
 } // namespace

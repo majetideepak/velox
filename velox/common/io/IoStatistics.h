@@ -102,6 +102,17 @@ class IoStatistics {
     return coalescedStorageLoadLatencyUs_;
   }
 
+  /// Prefetch completed before the driver needed the data.
+  IoCounter& prefetchHit() {
+    return prefetchHit_;
+  }
+
+  /// Prefetch still in progress when the driver needed the data (driver
+  /// waited).
+  IoCounter& prefetchMiss() {
+    return prefetchMiss_;
+  }
+
   /// Distribution of gaps (in bytes) between consecutive read regions
   /// before coalescing. Measures data locality on disk.
   IoCounter& readGap() {
@@ -180,6 +191,12 @@ class IoStatistics {
 
   // Gap between consecutive read regions before coalescing.
   IoCounter readGap_;
+
+  // Prefetch completed before driver needed data (IO/compute overlap).
+  IoCounter prefetchHit_;
+
+  // Prefetch still in progress when driver needed data (driver blocked).
+  IoCounter prefetchMiss_;
 
   std::unordered_map<std::string, OperationCounters> operationStats_;
   mutable std::mutex operationStatsMutex_;

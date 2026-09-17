@@ -181,6 +181,13 @@ class ReadFile {
     return false;
   }
 
+  /// Returns an executor suitable for running blocking preadv calls, or
+  /// nullptr if none is available. When non-null, callers may submit preadv
+  /// work to this executor instead of blocking their own thread.
+  virtual folly::Executor* readExecutor() const {
+    return nullptr;
+  }
+
   // Whether preads should be coalesced where possible. E.g. remote disk would
   // set to true, in-memory to false.
   virtual bool shouldCoalesce() const = 0;

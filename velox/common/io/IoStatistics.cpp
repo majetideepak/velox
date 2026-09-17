@@ -140,6 +140,8 @@ void IoStatistics::merge(const IoStatistics& other) {
   coalescedSsdLoadLatencyUs_.merge(other.coalescedSsdLoadLatencyUs_);
   coalescedStorageLoadLatencyUs_.merge(other.coalescedStorageLoadLatencyUs_);
   readGap_.merge(other.readGap_);
+  prefetchHit_.merge(other.prefetchHit_);
+  prefetchMiss_.merge(other.prefetchMiss_);
   {
     const auto& otherOperationStats = other.operationStats();
     std::lock_guard<std::mutex> l(operationStatsMutex_);

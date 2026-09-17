@@ -40,8 +40,11 @@ Aws::IOStreamFactory AwsWriteableStreamFactory(void* data, int64_t nbytes) {
 
 class S3ReadFile ::Impl {
  public:
-  explicit Impl(std::string_view path, Aws::S3::S3Client* client)
-      : client_(client) {
+  Impl(
+      std::string_view path,
+      Aws::S3::S3Client* client,
+      folly::Executor* readExecutor)
+      : client_(client), readExecutor_(readExecutor) {
     getBucketAndKeyFromPath(path, bucket_, key_);
   }
 
@@ -163,14 +166,19 @@ class S3ReadFile ::Impl {
     VELOX_CHECK_AWS_OUTCOME(outcome, "Failed to get S3 object", bucket_, key_);
   }
 
+ public:
   Aws::S3::S3Client* client_;
+  folly::Executor* readExecutor_;
   std::string bucket_;
   std::string key_;
   int64_t length_ = -1;
 };
 
-S3ReadFile::S3ReadFile(std::string_view path, Aws::S3::S3Client* client) {
-  impl_ = std::make_shared<Impl>(path, client);
+S3ReadFile::S3ReadFile(
+    std::string_view path,
+    Aws::S3::S3Client* client,
+    folly::Executor* readExecutor) {
+  impl_ = std::make_shared<Impl>(path, client, readExecutor);
 }
 
 S3ReadFile::~S3ReadFile() = default;
@@ -203,6 +211,10 @@ uint64_t S3ReadFile::preadv(
 
 uint64_t S3ReadFile::size() const {
   return impl_->size();
+}
+
+folly::Executor* S3ReadFile::readExecutor() const {
+  return impl_->readExecutor_;
 }
 
 uint64_t S3ReadFile::memoryUsage() const {

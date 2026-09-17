@@ -576,12 +576,15 @@ void CachedBufferedInput::readRegions(
     requestGroup.clear();
   }
 
-  if (prefetch && executor_) {
+  auto* readExec =
+      input_->getReadFile() ? input_->getReadFile()->readExecutor() : nullptr;
+  auto* prefetchExec = readExec ? readExec : executor_;
+  if (prefetch && prefetchExec) {
     // Only submit the loads created by this call to the executor.
     for (auto i = startIndex; i < coalescedLoads_.size(); ++i) {
       auto& load = coalescedLoads_[i];
       if (load->state() == CoalescedLoad::State::kPlanned) {
-        executor_->add(
+        prefetchExec->add(
             [pendingLoad = load, ssdSavable = options_.cacheable()]() {
               pendingLoad->loadOrFuture(nullptr, ssdSavable);
             });

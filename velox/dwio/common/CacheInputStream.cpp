@@ -334,7 +334,10 @@ void CacheInputStream::loadPosition() {
         MicrosecondWallTimer timer(&loadUs);
         try {
           if (!load->loadOrFuture(&waitFuture, cacheable_)) {
+            ioStats_->prefetchMiss().increment(1);
             waitFuture.wait();
+          } else {
+            ioStats_->prefetchHit().increment(1);
           }
         } catch (const std::exception& e) {
           // Log the error and continue. The error, if it persists, will be

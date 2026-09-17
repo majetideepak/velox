@@ -79,6 +79,8 @@ class FileDataSource : public DataSource {
   static constexpr std::string_view kNumRamRead{"numRamRead"};
   static constexpr std::string_view kRamReadBytes{"ramReadBytes"};
   static constexpr std::string_view kReadGapBytes{"readGapBytes"};
+  static constexpr std::string_view kNumPrefetchHit{"numPrefetchHit"};
+  static constexpr std::string_view kNumPrefetchMiss{"numPrefetchMiss"};
 
   FileDataSource(
       const RowTypePtr& outputType,
