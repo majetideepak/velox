@@ -785,12 +785,16 @@ int64_t FileDataSource::estimatedRowSize() {
 }
 
 vector_size_t FileDataSource::evaluateRemainingFilter(RowVectorPtr& rowVector) {
-  for (auto fieldIndex : multiReferencedFields_) {
-    LazyVector::ensureLoadedRows(
-        rowVector->childAt(fieldIndex),
-        filterRows_,
-        filterLazyDecoded_,
-        filterLazyBaseRows_);
+  uint64_t lazyLoadUs{0};
+  {
+    MicrosecondWallTimer timer(&lazyLoadUs);
+    for (auto fieldIndex : multiReferencedFields_) {
+      LazyVector::ensureLoadedRows(
+          rowVector->childAt(fieldIndex),
+          filterRows_,
+          filterLazyDecoded_,
+          filterLazyBaseRows_);
+    }
   }
   CpuWallTiming filterTiming;
   vector_size_t rowsRemaining{0};
@@ -805,6 +809,14 @@ vector_size_t FileDataSource::evaluateRemainingFilter(RowVectorPtr& rowVector) {
       filterTiming.wallNanos, std::memory_order_relaxed);
   totalRemainingFilterCpuTime_.fetch_add(
       filterTiming.cpuNanos, std::memory_order_relaxed);
+  if (lazyLoadUs > 1000 || filterTiming.wallNanos > 1'000'000) {
+    LOG(INFO) << "SPLIT_TRACE filter: file="
+              << (split_ ? split_->getFileName() : "?")
+              << " lazyLoadMs=" << lazyLoadUs / 1000
+              << " filterWallMs=" << filterTiming.wallNanos / 1'000'000
+              << " filterCpuMs=" << filterTiming.cpuNanos / 1'000'000
+              << " rows=" << rowVector->size();
+  }
   return rowsRemaining;
 }
 
