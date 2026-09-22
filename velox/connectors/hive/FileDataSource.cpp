@@ -23,6 +23,7 @@
 #include "velox/common/Casts.h"
 #include "velox/common/testutil/TestValue.h"
 #include "velox/common/time/CpuWallTimer.h"
+#include "velox/common/time/Timer.h"
 #include "velox/connectors/hive/ExtractionUtils.h"
 #include "velox/connectors/hive/FileConfig.h"
 #include "velox/expression/FieldReference.h"
@@ -540,14 +541,22 @@ void FileDataSource::addSplit(std::shared_ptr<ConnectorSplit> split) {
     splitReader_.reset();
   }
 
-  splitReader_ = createSplitReader();
-
-  // Split reader subclasses may need to use the reader options in prepareSplit
-  // so we initialize it beforehand.
-  splitReader_->configureReaderOptions(randomSkip_);
-  splitReader_->setRemainingFilterColumns(remainingFilterColumns_);
-  splitReader_->prepareSplit(metadataFilter_, runtimeStats_);
+  uint64_t createReaderUs{0};
+  uint64_t prepareSplitUs{0};
+  {
+    MicrosecondWallTimer timer(&createReaderUs);
+    splitReader_ = createSplitReader();
+    splitReader_->configureReaderOptions(randomSkip_);
+    splitReader_->setRemainingFilterColumns(remainingFilterColumns_);
+  }
+  {
+    MicrosecondWallTimer timer(&prepareSplitUs);
+    splitReader_->prepareSplit(metadataFilter_, runtimeStats_);
+  }
   readerOutputType_ = splitReader_->readerOutputType();
+  LOG(INFO) << "SPLIT_TRACE addSplit: file=" << split_->getFileName()
+            << " createReaderMs=" << createReaderUs / 1000
+            << " prepareSplitMs=" << prepareSplitUs / 1000;
 }
 
 std::optional<RowVectorPtr> FileDataSource::next(
@@ -576,10 +585,17 @@ std::optional<RowVectorPtr> FileDataSource::next(
     output_ = BaseVector::create(outputRowType, 0, pool_);
   }
 
-  const auto rowsScanned = splitReader_->next(size, output_);
+  uint64_t scanUs{0};
+  uint64_t rowsScanned{0};
+  {
+    MicrosecondWallTimer timer(&scanUs);
+    rowsScanned = splitReader_->next(size, output_);
+  }
   completedRows_ += rowsScanned;
   if (rowsScanned == 0) {
     splitReader_->updateRuntimeStats(runtimeStats_);
+    LOG(INFO) << "SPLIT_TRACE next: file=" << split_->getFileName()
+              << " scanMs=" << scanUs / 1000 << " rows=0 (empty)";
     resetSplit();
     return nullptr;
   }
@@ -589,6 +605,9 @@ std::optional<RowVectorPtr> FileDataSource::next(
   auto rowsRemaining = output_->size();
   if (rowsRemaining == 0) {
     // no rows passed the pushed down filters.
+    LOG(INFO) << "SPLIT_TRACE next: file=" << split_->getFileName()
+              << " scanMs=" << scanUs / 1000 << " rowsScanned=" << rowsScanned
+              << " rowsAfterPushdown=0";
     return getEmptyOutput();
   }
 
@@ -601,10 +620,20 @@ std::optional<RowVectorPtr> FileDataSource::next(
   BufferPtr remainingIndices;
   filterRows_.resize(rowVector->size());
 
+  uint64_t filterUs{0};
   if (remainingFilterExprSet_) {
-    rowsRemaining = evaluateRemainingFilter(rowVector);
+    {
+      MicrosecondWallTimer timer(&filterUs);
+      rowsRemaining = evaluateRemainingFilter(rowVector);
+    }
     VELOX_CHECK_LE(rowsRemaining, rowsScanned);
     if (rowsRemaining == 0) {
+      LOG(INFO) << "SPLIT_TRACE next: file=" << split_->getFileName()
+                << " scanMs=" << scanUs / 1000
+                << " filterMs=" << filterUs / 1000
+                << " rowsScanned=" << rowsScanned
+                << " rowsAfterPushdown=" << output_->size()
+                << " rowsAfterFilter=0";
       // No rows passed the remaining filter.
       return getEmptyOutput();
     }
@@ -634,6 +663,12 @@ std::optional<RowVectorPtr> FileDataSource::next(
     }
     outputColumns.push_back(std::move(column));
   }
+
+  LOG(INFO) << "SPLIT_TRACE next: file=" << split_->getFileName()
+            << " scanMs=" << scanUs / 1000 << " filterMs=" << filterUs / 1000
+            << " rowsScanned=" << rowsScanned
+            << " rowsAfterPushdown=" << output_->size()
+            << " rowsAfterFilter=" << rowsRemaining;
 
   return std::make_shared<RowVector>(
       pool_, outputType_, BufferPtr(nullptr), rowsRemaining, outputColumns);
