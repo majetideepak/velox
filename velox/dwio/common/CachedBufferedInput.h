@@ -47,6 +47,7 @@ struct CacheRequest {
   /// accessed large columns where hitting one piece should not load the
   /// adjacent pieces.
   bool coalesces{true};
+  bool prefetch{false};
   const SeekableInputStream* stream;
 };
 

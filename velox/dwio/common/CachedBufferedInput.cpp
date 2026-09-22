@@ -70,6 +70,9 @@ std::unique_ptr<SeekableInputStream> CachedBufferedInput::enqueue(
   } else {
     requests_.emplace_back(
         RawFileCacheKey{fileNum_.id(), region.offset}, region.length, id);
+    if (!id.empty() && prefetchStreamIds_.count(id.id())) {
+      requests_.back().prefetch = true;
+    }
     requests_.back().stream = stream.get();
   }
   return stream;
@@ -239,9 +242,10 @@ void CachedBufferedInput::load(const LogType /*unused*/) {
     if (!prefetchAnyway && (tracker_ != nullptr)) {
       trackingData = tracker_->trackingData(request.trackingId);
     }
-    const int loadIndex =
-        (prefetchAnyway || isPrefetchPct(adjustedReadPct(trackingData))) ? 1
-                                                                         : 0;
+    const int loadIndex = (prefetchAnyway || request.prefetch ||
+                           isPrefetchPct(adjustedReadPct(trackingData)))
+        ? 1
+        : 0;
     auto parts = makeRequestParts(
         request, trackingData, options_.loadQuantum(), extraRequests);
     for (auto part : parts) {
@@ -576,12 +580,15 @@ void CachedBufferedInput::readRegions(
     requestGroup.clear();
   }
 
-  if (prefetch && executor_) {
+  auto* readExec =
+      input_->getReadFile() ? input_->getReadFile()->readExecutor() : nullptr;
+  auto* prefetchExec = readExec ? readExec : executor_;
+  if (prefetch && prefetchExec) {
     // Only submit the loads created by this call to the executor.
     for (auto i = startIndex; i < coalescedLoads_.size(); ++i) {
       auto& load = coalescedLoads_[i];
       if (load->state() == CoalescedLoad::State::kPlanned) {
-        executor_->add(
+        prefetchExec->add(
             [pendingLoad = load, ssdSavable = options_.cacheable()]() {
               pendingLoad->loadOrFuture(nullptr, ssdSavable);
             });

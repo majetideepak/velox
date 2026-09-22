@@ -181,6 +181,11 @@ class ReadFile {
     return false;
   }
 
+  /// Returns an executor for running blocking preadv calls, or nullptr.
+  virtual folly::Executor* readExecutor() const {
+    return nullptr;
+  }
+
   // Whether preads should be coalesced where possible. E.g. remote disk would
   // set to true, in-memory to false.
   virtual bool shouldCoalesce() const = 0;

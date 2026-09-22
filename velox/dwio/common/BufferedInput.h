@@ -16,6 +16,7 @@
 
 #pragma once
 
+#include <folly/container/F14Set.h>
 #include "folly/io/IOBuf.h"
 #include "velox/common/caching/AsyncDataCache.h"
 #include "velox/common/caching/ScanTracker.h"
@@ -312,8 +313,13 @@ class BufferedInput {
     noPrefetch.resize(l);
   }
 
+  void setPrefetchStreamIds(folly::F14FastSet<int32_t> ids) {
+    prefetchStreamIds_ = std::move(ids);
+  }
+
   const std::shared_ptr<ReadFileInputStream> input_;
   memory::MemoryPool* const pool_;
+  folly::F14FastSet<int32_t> prefetchStreamIds_;
 
  private:
   std::unique_ptr<SeekableInputStream> readBuffer(

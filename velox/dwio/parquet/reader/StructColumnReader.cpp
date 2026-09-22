@@ -20,6 +20,8 @@
 #include <optional>
 #include <tuple>
 
+#include <folly/container/F14Set.h>
+
 #include "velox/dwio/common/BufferedInput.h"
 #include "velox/dwio/parquet/reader/ParquetColumnReader.h"
 #include "velox/dwio/parquet/reader/ParquetData.h"
@@ -311,6 +313,19 @@ std::shared_ptr<dwio::common::BufferedInput> StructColumnReader::loadRowGroup(
     return input;
   }
   auto newInput = input->clone();
+
+  // Force-prefetch lazy columns that the remaining filter or output will need.
+  folly::F14FastSet<int32_t> prefetchIds;
+  for (auto* child : children_) {
+    auto* spec = child->scanSpec();
+    if (child->isTopLevel() && spec->projectOut() && !spec->hasFilter()) {
+      prefetchIds.insert(child->fileType().column());
+    }
+  }
+  if (!prefetchIds.empty()) {
+    newInput->setPrefetchStreamIds(std::move(prefetchIds));
+  }
+
   enqueueRowGroup(index, *newInput);
   newInput->load(dwio::common::LogType::STRIPE);
   return newInput;
