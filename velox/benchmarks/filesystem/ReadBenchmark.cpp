@@ -23,6 +23,11 @@
 #include "velox/connectors/hive/storage_adapters/s3fs/RegisterS3FileSystem.h"
 
 DEFINE_string(path, "", "Path of the input file");
+DEFINE_int32(
+    num_files,
+    1,
+    "Number of files to read in parallel. Files are listed from the same "
+    "directory as --path. Each thread reads from a different file.");
 DEFINE_int64(
     file_size_gb,
     0,
@@ -49,6 +54,10 @@ DEFINE_int32(
     "Total reads per thread when throughput for a --bytes/--gap/--/gap/"
     "--num_in_run combination");
 DEFINE_string(config, "", "Path of the config file");
+DEFINE_bool(
+    parallel_only,
+    false,
+    "If true, run only the parallel (mt) modes, skipping serial tests");
 
 namespace {
 static bool notEmpty(const char* /*flagName*/, const std::string& value) {
@@ -83,12 +92,13 @@ std::shared_ptr<config::ConfigBase> readConfig(const std::string& filePath) {
   return std::make_shared<config::ConfigBase>(std::move(properties));
 }
 
-// Initialize a LocalReadFile instance for the specified 'path'.
+// Initialize ReadFile instances for the specified 'path'.
 void ReadBenchmark::initialize() {
   executor_ = std::make_unique<folly::IOThreadPoolExecutor>(FLAGS_num_threads);
   if (FLAGS_odirect) {
     readFile_ = std::make_unique<LocalReadFile>(
         FLAGS_path, /*executor=*/nullptr, /*bufferIo=*/false);
+    readFiles_.push_back(readFile_.get());
   } else {
     filesystems::registerLocalFileSystem();
     filesystems::registerS3FileSystem();
@@ -100,9 +110,30 @@ void ReadBenchmark::initialize() {
       config = readConfig(FLAGS_config);
     }
     auto fs = filesystems::getFileSystem(FLAGS_path, config);
-    readFile_ = fs->openFileForRead(FLAGS_path);
+    if (FLAGS_num_files > 1) {
+      // List files from the same directory as --path.
+      auto dir = FLAGS_path.substr(0, FLAGS_path.rfind('/'));
+      auto files = fs->list(dir);
+      std::sort(files.begin(), files.end());
+      int count = 0;
+      for (auto& filePath : files) {
+        if (count >= FLAGS_num_files) {
+          break;
+        }
+        auto file = fs->openFileForRead(filePath);
+        LOG(INFO) << "Opened file " << count << ": " << filePath
+                  << " size=" << file->size();
+        readFiles_.push_back(file.get());
+        ownedReadFiles_.push_back(std::move(file));
+        ++count;
+      }
+      LOG(INFO) << "Opened " << readFiles_.size() << " files";
+    } else {
+      readFile_ = fs->openFileForRead(FLAGS_path);
+      readFiles_.push_back(readFile_.get());
+    }
   }
-  fileSize_ = readFile_->size();
+  fileSize_ = readFiles_[0]->size();
   if (FLAGS_file_size_gb) {
     fileSize_ = std::min<uint64_t>(FLAGS_file_size_gb << 30, fileSize_);
   }

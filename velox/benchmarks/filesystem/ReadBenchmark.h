@@ -40,6 +40,7 @@ DECLARE_int32(num_in_run);
 
 DECLARE_int32(measurement_size);
 DECLARE_string(config);
+DECLARE_bool(parallel_only);
 
 namespace facebook::velox {
 
@@ -76,6 +77,10 @@ class ReadBenchmark {
       LOG(ERROR) << "Failed to clear OS disk cache: errno=" << errno;
     }
 #endif
+  }
+
+  ReadFile* getReadFile(int32_t index) {
+    return readFiles_[index % readFiles_.size()];
   }
 
   Scratch& getScratch(int32_t size) {
@@ -119,6 +124,7 @@ class ReadBenchmark {
           futures.push_back(std::move(future));
         }
         int64_t offset = folly::Random::rand64(rng_) % (fileSize_ - rangeSize);
+        auto* file = getReadFile(repeat);
         switch (mode) {
           case Mode::Pread:
             label = "1 pread";
@@ -128,10 +134,11 @@ class ReadBenchmark {
                               size,
                               count,
                               rangeSize,
+                              file,
                               this,
                               capturedPromise = std::move(promise)]() {
                 auto& scratch = getScratch(rangeSize);
-                readFile_->pread(offset, rangeSize, scratch.buffer.data());
+                file->pread(offset, rangeSize, scratch.buffer.data());
                 for (auto i = 0; i < count; ++i) {
                   memcpy(
                       scratch.bufferCopy.data() + i * size,
@@ -143,7 +150,7 @@ class ReadBenchmark {
 
               );
             } else {
-              readFile_->pread(offset, rangeSize, globalScratch.buffer.data());
+              file->pread(offset, rangeSize, globalScratch.buffer.data());
               for (auto i = 0; i < count; ++i) {
                 memcpy(
                     globalScratch.bufferCopy.data() + i * size,
@@ -159,6 +166,7 @@ class ReadBenchmark {
                               gap,
                               size,
                               rangeSize,
+                              file,
                               this,
                               capturedPromise = std::move(promise)]() {
                 auto& scratch = getScratch(rangeSize);
@@ -170,7 +178,7 @@ class ReadBenchmark {
                     ranges.push_back(folly::Range<char*>(nullptr, gap));
                   }
                 }
-                readFile_->preadv(offset, ranges);
+                file->preadv(offset, ranges);
                 capturedPromise->setValue(true);
               });
             } else {
@@ -183,7 +191,7 @@ class ReadBenchmark {
                   ranges.push_back(folly::Range<char*>(nullptr, gap));
                 }
               }
-              readFile_->preadv(offset, ranges);
+              file->preadv(offset, ranges);
             }
 
             break;
@@ -196,11 +204,12 @@ class ReadBenchmark {
                               size,
                               count,
                               rangeSize,
+                              file,
                               this,
                               capturedPromise = std::move(promise)]() {
                 auto& scratch = getScratch(rangeSize);
                 for (auto counter = 0; counter < count; ++counter) {
-                  readFile_->pread(
+                  file->pread(
                       offset + counter * (size + gap),
                       size,
                       scratch.buffer.data() + counter * size);
@@ -209,7 +218,7 @@ class ReadBenchmark {
               });
             } else {
               for (auto counter = 0; counter < count; ++counter) {
-                readFile_->pread(
+                file->pread(
                     offset + counter * (size + gap),
                     size,
                     globalScratch.buffer.data() + counter * size);
@@ -244,9 +253,11 @@ class ReadBenchmark {
                      count,
                      repeats)
               << std::endl;
-    randomReads(size, gap, count, repeats, Mode::Pread, false);
-    randomReads(size, gap, count, repeats, Mode::Preadv, false);
-    randomReads(size, gap, count, repeats, Mode::Multiple, false);
+    if (!FLAGS_parallel_only) {
+      randomReads(size, gap, count, repeats, Mode::Pread, false);
+      randomReads(size, gap, count, repeats, Mode::Preadv, false);
+      randomReads(size, gap, count, repeats, Mode::Multiple, false);
+    }
     randomReads(size, gap, count, repeats, Mode::Pread, true);
     randomReads(size, gap, count, repeats, Mode::Preadv, true);
     randomReads(size, gap, count, repeats, Mode::Multiple, true);
@@ -261,6 +272,8 @@ class ReadBenchmark {
   std::string writeBatch_;
   std::unique_ptr<folly::IOThreadPoolExecutor> executor_;
   std::unique_ptr<ReadFile> readFile_;
+  std::vector<std::unique_ptr<ReadFile>> ownedReadFiles_;
+  std::vector<ReadFile*> readFiles_;
   folly::Random::DefaultGenerator rng_;
   int64_t fileSize_;
 
