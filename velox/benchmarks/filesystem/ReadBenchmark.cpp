@@ -113,15 +113,24 @@ void ReadBenchmark::initialize() {
     if (FLAGS_num_files > 1) {
       // List files from the same directory as --path.
       auto dir = FLAGS_path.substr(0, FLAGS_path.rfind('/'));
-      auto files = fs->list(dir);
-      std::sort(files.begin(), files.end());
+      auto keys = fs->list(dir);
+      std::sort(keys.begin(), keys.end());
+      // Extract the scheme + bucket prefix (e.g., "s3://bucket/") from --path
+      // to reconstruct full paths from the keys returned by list().
+      auto schemeEnd = FLAGS_path.find("://");
+      std::string prefix;
+      if (schemeEnd != std::string::npos) {
+        auto bucketEnd = FLAGS_path.find('/', schemeEnd + 3);
+        prefix = FLAGS_path.substr(0, bucketEnd + 1);
+      }
       int count = 0;
-      for (auto& filePath : files) {
+      for (auto& key : keys) {
         if (count >= FLAGS_num_files) {
           break;
         }
-        auto file = fs->openFileForRead(filePath);
-        LOG(INFO) << "Opened file " << count << ": " << filePath
+        auto fullPath = prefix + key;
+        auto file = fs->openFileForRead(fullPath);
+        LOG(INFO) << "Opened file " << count << ": " << fullPath
                   << " size=" << file->size();
         readFiles_.push_back(file.get());
         ownedReadFiles_.push_back(std::move(file));
