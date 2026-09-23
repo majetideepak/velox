@@ -41,6 +41,7 @@ DECLARE_int32(num_in_run);
 DECLARE_int32(measurement_size);
 DECLARE_string(config);
 DECLARE_bool(parallel_only);
+DECLARE_bool(velox_pattern);
 
 namespace facebook::velox {
 
@@ -263,6 +264,78 @@ class ReadBenchmark {
     randomReads(size, gap, count, repeats, Mode::Pread, true);
     randomReads(size, gap, count, repeats, Mode::Preadv, true);
     randomReads(size, gap, count, repeats, Mode::Multiple, true);
+  }
+
+  /// Simulates the Velox Parquet scan pattern: per file, 1 footer read
+  /// (256KB from file tail) + 2-3 column chunk reads (1-2MB each) at
+  /// scattered offsets. Measures aggregate throughput across files.
+  void veloxPattern() {
+    clearCache();
+    std::vector<folly::SemiFuture<bool>> futures;
+
+    // Per-file read sizes matching the observed distribution.
+    const int32_t footerSize = 262144; // 256KB
+    const int32_t col1Size = 2 * 1024 * 1024; // 2MB
+    const int32_t col2Size = 1200 * 1024; // 1.2MB
+    const int32_t col3Size = 1024 * 1024; // 1MB (only for 4-read files)
+
+    const int repeats = std::max<int32_t>(
+        3, FLAGS_measurement_size / (footerSize + col1Size + col2Size));
+    const int64_t usefulBytesPerRepeat = footerSize + col1Size + col2Size;
+
+    std::cout << fmt::format(
+                     "VeloxPattern: {} repeats, {} files, {} threads",
+                     repeats,
+                     readFiles_.size(),
+                     FLAGS_num_threads)
+              << std::endl;
+
+    uint64_t usec = 0;
+    {
+      MicrosecondTimer timer(&usec);
+      for (auto repeat = 0; repeat < repeats; ++repeat) {
+        auto [tempPromise, future] = folly::makePromiseContract<bool>();
+        auto promise = std::make_unique<folly::Promise<bool>>();
+        *promise = std::move(tempPromise);
+        futures.push_back(std::move(future));
+
+        auto* file = getReadFile(repeat);
+        auto fSize = file->size();
+
+        executor_->add([file,
+                        fSize,
+                        footerSize,
+                        col1Size,
+                        col2Size,
+                        this,
+                        capturedPromise = std::move(promise)]() {
+          auto& scratch = getScratch(col1Size);
+
+          // Read 1: footer (last 256KB of file)
+          file->pread(fSize - footerSize, footerSize, scratch.buffer.data());
+
+          // Read 2: column chunk at ~5% into file
+          auto col1Offset = static_cast<int64_t>(fSize * 0.05);
+          file->pread(col1Offset, col1Size, scratch.buffer.data());
+
+          // Read 3: column chunk at ~15% into file
+          auto col2Offset = static_cast<int64_t>(fSize * 0.15);
+          file->pread(col2Offset, col2Size, scratch.buffer.data());
+
+          capturedPromise->setValue(true);
+        });
+      }
+      auto& exec = folly::QueuedImmediateExecutor::instance();
+      for (int32_t i = futures.size() - 1; i >= 0; --i) {
+        std::move(futures[i]).via(&exec).wait();
+      }
+    }
+    std::cout << fmt::format(
+                     "{} MB/s velox pattern mt ({} useful bytes/file)",
+                     (static_cast<float>(usefulBytesPerRepeat) * repeats) /
+                         usec,
+                     usefulBytesPerRepeat)
+              << std::endl;
   }
 
   void run();

@@ -55,6 +55,11 @@ DEFINE_int32(
     "--num_in_run combination");
 DEFINE_string(config, "", "Path of the config file");
 DEFINE_bool(
+    velox_pattern,
+    false,
+    "Run the Velox Parquet scan pattern: 1 footer (256KB) + 2-3 column reads "
+    "(1-2MB) per file, simulating the actual query access pattern");
+DEFINE_bool(
     parallel_only,
     false,
     "If true, run only the parallel (mt) modes, skipping serial tests");
@@ -162,6 +167,10 @@ void ReadBenchmark::finalize() {
 }
 
 void ReadBenchmark::run() {
+  if (FLAGS_velox_pattern) {
+    veloxPattern();
+    return;
+  }
   if (FLAGS_bytes) {
     modes(FLAGS_bytes, FLAGS_gap, FLAGS_num_in_run);
     return;
