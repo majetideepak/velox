@@ -280,7 +280,8 @@ class ReadBenchmark {
     const int32_t col3Size = 1024 * 1024; // 1MB (only for 4-read files)
 
     const int repeats = std::max<int32_t>(
-        3, FLAGS_measurement_size / (footerSize + col1Size + col2Size));
+        static_cast<int32_t>(readFiles_.size()),
+        FLAGS_measurement_size / (footerSize + col1Size + col2Size));
     const int64_t usefulBytesPerRepeat = footerSize + col1Size + col2Size;
 
     std::cout << fmt::format(
