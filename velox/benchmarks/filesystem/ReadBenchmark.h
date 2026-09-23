@@ -123,8 +123,10 @@ class ReadBenchmark {
           *promise = std::move(tempPromise);
           futures.push_back(std::move(future));
         }
-        int64_t offset = folly::Random::rand64(rng_) % (fileSize_ - rangeSize);
         auto* file = getReadFile(repeat);
+        auto effectiveFileSize = std::min<uint64_t>(file->size(), fileSize_);
+        int64_t offset =
+            folly::Random::rand64(rng_) % (effectiveFileSize - rangeSize);
         switch (mode) {
           case Mode::Pread:
             label = "1 pread";
