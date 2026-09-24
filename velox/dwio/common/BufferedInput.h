@@ -16,6 +16,7 @@
 
 #pragma once
 
+#include <folly/container/F14Set.h>
 #include "folly/io/IOBuf.h"
 #include "velox/common/caching/AsyncDataCache.h"
 #include "velox/common/caching/ScanTracker.h"
@@ -240,6 +241,10 @@ class BufferedInput {
   /// needs to reset the buffered input state between lookups.
   virtual void reset();
 
+  void setPrefetchStreamIds(folly::F14FastSet<int32_t> ids) {
+    prefetchStreamIds_ = std::move(ids);
+  }
+
  protected:
   static int adjustedReadPct(const cache::TrackingData& trackingData) {
     // Exclude the references made since the last read (lastReferencedBytes) so
@@ -314,6 +319,7 @@ class BufferedInput {
 
   const std::shared_ptr<ReadFileInputStream> input_;
   memory::MemoryPool* const pool_;
+  folly::F14FastSet<int32_t> prefetchStreamIds_;
 
  private:
   std::unique_ptr<SeekableInputStream> readBuffer(

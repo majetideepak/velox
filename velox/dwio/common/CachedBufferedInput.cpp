@@ -70,6 +70,9 @@ std::unique_ptr<SeekableInputStream> CachedBufferedInput::enqueue(
   } else {
     requests_.emplace_back(
         RawFileCacheKey{fileNum_.id(), region.offset}, region.length, id);
+    if (!id.empty() && prefetchStreamIds_.count(id.id())) {
+      requests_.back().prefetch = true;
+    }
     requests_.back().stream = stream.get();
   }
   return stream;
@@ -239,9 +242,10 @@ void CachedBufferedInput::load(const LogType /*unused*/) {
     if (!prefetchAnyway && (tracker_ != nullptr)) {
       trackingData = tracker_->trackingData(request.trackingId);
     }
-    const int loadIndex =
-        (prefetchAnyway || isPrefetchPct(adjustedReadPct(trackingData))) ? 1
-                                                                         : 0;
+    const int loadIndex = (prefetchAnyway || request.prefetch ||
+                           isPrefetchPct(adjustedReadPct(trackingData)))
+        ? 1
+        : 0;
     auto parts = makeRequestParts(
         request, trackingData, options_.loadQuantum(), extraRequests);
     for (auto part : parts) {
