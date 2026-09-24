@@ -1628,6 +1628,13 @@ class ParquetRowReader::Impl {
         *options_.scanSpec());
     columnReader_->setIsTopLevel();
 
+    // Tell the struct column reader which lazy columns the remaining filter
+    // needs, so loadRowGroup() force-prefetches them.
+    if (!options_.remainingFilterColumns().empty()) {
+      static_cast<StructColumnReader&>(*columnReader_)
+          .setRemainingFilterColumnIds(options_.remainingFilterColumns());
+    }
+
     filterRowGroups();
     if (!rowGroupIds_.empty()) {
       // schedule prefetch of first row group right after reading the metadata.

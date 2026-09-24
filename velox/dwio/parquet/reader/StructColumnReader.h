@@ -18,6 +18,8 @@
 
 #include <memory>
 
+#include <folly/container/F14Set.h>
+
 #include "velox/dwio/common/Options.h"
 #include "velox/dwio/common/SelectiveStructColumnReader.h"
 #include "velox/dwio/parquet/common/LevelConversion.h"
@@ -121,6 +123,23 @@ class StructColumnReader : public dwio::common::SelectiveStructColumnReader {
 
   // Owns the synthetic non-projected reader and its ScanSpec.
   std::unique_ptr<SyntheticRepDefSource> syntheticRepDefSource_;
+
+  // Parquet column indices of remaining-filter columns to force-prefetch.
+  folly::F14FastSet<int32_t> remainingFilterColumnIds_;
+
+ public:
+  /// Sets the column indices of remaining-filter columns that should be
+  /// force-prefetched during loadRowGroup().
+  void setRemainingFilterColumnIds(
+      const folly::F14FastSet<std::string>& columnNames) {
+    for (auto* child : children_) {
+      if (child->isTopLevel() && child->scanSpec()->projectOut() &&
+          !child->scanSpec()->hasFilter() &&
+          columnNames.count(child->scanSpec()->fieldName())) {
+        remainingFilterColumnIds_.insert(child->fileType().column());
+      }
+    }
+  }
 };
 
 } // namespace facebook::velox::parquet

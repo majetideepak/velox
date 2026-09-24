@@ -311,6 +311,13 @@ std::shared_ptr<dwio::common::BufferedInput> StructColumnReader::loadRowGroup(
     return input;
   }
   auto newInput = input->clone();
+
+  // Prefetch columns needed by the remaining filter so the driver thread
+  // doesn't block on S3 during filter evaluation.
+  if (!remainingFilterColumnIds_.empty()) {
+    newInput->setPrefetchStreamIds(remainingFilterColumnIds_);
+  }
+
   enqueueRowGroup(index, *newInput);
   newInput->load(dwio::common::LogType::STRIPE);
   return newInput;
