@@ -202,6 +202,33 @@ class FileConfig {
       "stats-based-filter-reorder-disabled";
 
   VELOX_HIVE_CONFIG(
+      kEagerRemainingFilterColumnsSession,
+      eagerRemainingFilterColumns,
+      "reader.eager_remaining_filter_columns",
+      bool,
+      false,
+      "Read a remaining filter column eagerly instead of wrapping it in a "
+      "LazyVector, once its lazy loads have covered enough of the rows they "
+      "were offered to show that deferring buys nothing. Decided per column "
+      "from read statistics carried across splits, so a column the remaining "
+      "filter rarely evaluates stays lazy. Applies to all selective readers.")
+  static constexpr const char* kEagerRemainingFilterColumns =
+      "reader.eager-remaining-filter-columns";
+
+  VELOX_HIVE_CONFIG(
+      kEagerRemainingFilterColumnsLoadRatioSession,
+      eagerRemainingFilterColumnsLoadRatio,
+      "reader.eager_remaining_filter_columns_load_ratio",
+      double,
+      0.9,
+      "Fraction of the rows offered to a remaining filter column's "
+      "LazyVectors that must have been loaded before the column is read "
+      "eagerly. Must be in (0, 1]. Below 1.0 the column may decode up to "
+      "(1 - ratio) of its rows unnecessarily.")
+  static constexpr const char* kEagerRemainingFilterColumnsLoadRatio =
+      "reader.eager-remaining-filter-columns-load-ratio";
+
+  VELOX_HIVE_CONFIG(
       kIndexEnabledSession,
       indexEnabled,
       "index_enabled",

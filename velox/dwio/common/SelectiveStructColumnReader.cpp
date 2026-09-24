@@ -499,9 +499,20 @@ void SelectiveStructColumnReaderBase::read(
     const auto fieldIndex = childSpec->subscript();
     auto* reader = children_.at(fieldIndex);
     if (reader->isTopLevel() && childSpec->projectOut() &&
-        !childSpec->hasFilter() && generateLazyChildren_) {
+        !childSpec->hasFilter() && generateLazyChildren_ &&
+        !childSpec->eagerMaterialize()) {
       // Will make a LazyVector (with or without transform).
       continue;
+    }
+
+    if (childSpec->eagerMaterialize()) {
+      // This column would have been lazy, so it may carry state that only the
+      // lazy load path maintains. Deferred streams are normally loaded by
+      // ColumnLoader before it decodes, and a previous batch's load may have
+      // left a ValueHook behind: reading with a stale hook would both write
+      // through it and skip materializing the values the caller expects.
+      reader->formatData().loadLazyInputStreams();
+      childSpec->setValueHook(nullptr);
     }
 
     advanceFieldReader(reader, offset);
@@ -626,6 +637,10 @@ void SelectiveStructColumnReaderBase::getValues(
     for (const auto& childSpec : scanSpec_->children()) {
       if (childSpec->channel() == fieldIdx && !childSpec->isConstant()) {
         auto index = static_cast<vector_size_t>(childSpec->subscript());
+        // No eagerMaterialize() check here: this block only runs for a
+        // non-root struct, so 'childSpec' is an inner extracted field rather
+        // than a top level column, and only top level columns are ever marked
+        // eager candidates.
         if (childSpec->hasFilter() || !children_[index]->isTopLevel() ||
             !generateLazyChildren_) {
           children_[index]->getValues(rows, result);
@@ -724,12 +739,15 @@ void SelectiveStructColumnReaderBase::getValues(
     }
 
     if (childSpec->hasFilter() || !children_[index]->isTopLevel() ||
-        !generateLazyChildren_) {
+        !generateLazyChildren_ || childSpec->eagerMaterialize()) {
       children_[index]->getValues(rows, &childResult);
       continue;
     }
 
-    // LazyVector result.
+    // LazyVector result. Count the offer here rather than where read() decides
+    // to skip the child: the conditions are equivalent, but read() bails out
+    // early on an empty or fully filtered batch.
+    childSpec->recordLazyOffered(rows.size());
     setOutputRowsForLazy(rows);
     // When the child has a transform (e.g., extraction pushdown), the lazy
     // vector type is the transform's output type, not the file column type.

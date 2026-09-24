@@ -16,10 +16,21 @@
 
 #include "velox/dwio/common/ScanSpec.h"
 
+#include "velox/common/base/RuntimeMetrics.h"
 #include "velox/core/Expressions.h"
 #include "velox/dwio/common/Statistics.h"
 
 namespace facebook::velox::common {
+
+namespace {
+
+// Rows that must have been offered inside LazyVectors before the load ratio is
+// trusted. One default batch, so a single unrepresentative batch at the start
+// of a split cannot decide the column. Mirrors the numIn() guard that
+// compareTimeToDropValue applies before trusting filter selectivity.
+constexpr int64_t kMinLazyRowsOffered = 1024;
+
+} // namespace
 
 // static
 std::string_view ScanSpec::columnTypeString(ScanSpec::ColumnType columnType) {
@@ -116,7 +127,47 @@ uint64_t ScanSpec::newRead() {
            }))) {
     reorder();
   }
+  for (auto& child : children_) {
+    child->updateEagerMaterialize();
+  }
   return ++numReads_;
+}
+
+void ScanSpec::setEagerMaterializeCandidate(bool value, double loadRatio) {
+  VELOX_CHECK_GT(loadRatio, 0.0);
+  VELOX_CHECK_LE(loadRatio, 1.0);
+  eagerMaterializeCandidate_ = value;
+  eagerLoadRatio_ = loadRatio;
+}
+
+void ScanSpec::recordLazyOffered(vector_size_t numRows) {
+  lazyRowsOffered_ += numRows;
+}
+
+void ScanSpec::recordLazyLoaded(vector_size_t numRows, bool usedValueHook) {
+  lazyRowsLoaded_ += numRows;
+  usedValueHook_ |= usedValueHook;
+}
+
+void ScanSpec::updateEagerMaterialize() {
+  if (!eagerMaterializeCandidate_ || usedValueHook_) {
+    return;
+  }
+  if (lazyRowsOffered_ < kMinLazyRowsOffered) {
+    return;
+  }
+  // Recomputed every read to stay symmetric with stats based filter
+  // reordering, but in practice the transition to eager is one way: an eager
+  // column produces no LazyVector, so the counters stop moving and the ratio
+  // freezes at the value that triggered the switch.
+  // TODO: To switch back, keep the column lazy every Nth read so the ratio is
+  // re-measured.
+  const bool eager = lazyRowsLoaded_ >=
+      static_cast<double>(lazyRowsOffered_) * eagerLoadRatio_;
+  if (eager && !eagerMaterialize_) {
+    addThreadLocalRuntimeStat("eagerRemainingFilterColumns", RuntimeCounter(1));
+  }
+  eagerMaterialize_ = eager;
 }
 
 void ScanSpec::reorder() {
@@ -215,6 +266,17 @@ void ScanSpec::moveAdaptationFrom(ScanSpec& other) {
       // received.
       child->filter_ = std::move(otherChild->filter_);
       child->selectivity_ = otherChild->selectivity_;
+      // Carry the lazy/eager adaptation too. This is the only channel: a new
+      // split either gets a preloaded spec handed over or has its spec rebuilt
+      // from scratch, and both go through here. Dropping a field silently
+      // restarts the learning on every split.
+      child->eagerMaterializeCandidate_ =
+          otherChild->eagerMaterializeCandidate_;
+      child->eagerLoadRatio_ = otherChild->eagerLoadRatio_;
+      child->lazyRowsOffered_ = otherChild->lazyRowsOffered_;
+      child->lazyRowsLoaded_ = otherChild->lazyRowsLoaded_;
+      child->usedValueHook_ = otherChild->usedValueHook_;
+      child->eagerMaterialize_ = otherChild->eagerMaterialize_;
     }
   }
 }

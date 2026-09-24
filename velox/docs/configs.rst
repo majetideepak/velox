@@ -913,6 +913,22 @@ Common Options
        filter execution order is totally determined by the filter type. Otherwise, the file
        reader will dynamically adjust the filter execution order based on the past filter
        execution stats. Session: ``stats_based_filter_reorder_disabled``.
+   * - ``reader.eager-remaining-filter-columns``
+     - bool
+     - false
+     - If true, a column referenced by the remaining filter is read eagerly instead of being
+       wrapped in a ``LazyVector``, once its lazy loads have covered enough of the rows they
+       were offered to show that deferring buys nothing. The decision is made per column from
+       read statistics that are carried across splits, so a column the remaining filter rarely
+       evaluates keeps being read lazily. Applies to all selective readers.
+       Session: ``reader.eager_remaining_filter_columns``.
+   * - ``reader.eager-remaining-filter-columns-load-ratio``
+     - double
+     - 0.9
+     - Fraction of the rows offered to a remaining filter column's ``LazyVector`` s that must
+       have been loaded before the column is read eagerly. Must be in (0, 1]. A value below
+       1.0 allows the column to decode up to (1 - ratio) of its rows unnecessarily.
+       Session: ``reader.eager_remaining_filter_columns_load_ratio``.
    * - ``selective-nimble-reader-enabled``
      - bool
      - true

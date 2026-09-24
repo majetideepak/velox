@@ -276,9 +276,32 @@ FileDataSource::FileDataSource(
     configureExtractionColumns();
   }
 
+  configureEagerRemainingFilterColumns(connectorQueryCtx->sessionProperties());
+
   dataIoStats_ = std::make_shared<io::IoStatistics>();
   metadataIoStats_ = std::make_shared<io::IoStatistics>();
   ioStats_ = std::make_shared<IoStats>();
+}
+
+void FileDataSource::configureEagerRemainingFilterColumns(
+    const config::ConfigBase* sessionProperties) {
+  if (!fileConfig_->eagerRemainingFilterColumns(sessionProperties)) {
+    return;
+  }
+  const auto loadRatio =
+      fileConfig_->eagerRemainingFilterColumnsLoadRatio(sessionProperties);
+  VELOX_USER_CHECK(
+      loadRatio > 0.0 && loadRatio <= 1.0,
+      "{} must be in (0, 1]. Got {}",
+      FileConfig::kEagerRemainingFilterColumnsLoadRatioSession,
+      loadRatio);
+  for (const auto& name : remainingFilterColumns_) {
+    // A remaining filter column is missing here when it is a partition key or
+    // an info column, which are constant and never lazy anyway.
+    if (auto* fieldSpec = scanSpec_->childByName(name)) {
+      fieldSpec->setEagerMaterializeCandidate(true, loadRatio);
+    }
+  }
 }
 
 void FileDataSource::configureExtractionColumns() {

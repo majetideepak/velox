@@ -40,7 +40,8 @@ namespace common {
 /// mutable by readers to reflect filter order and other adaptations.
 ///
 /// Not thread safe. One scan owns a spec and alone adds children, reorders
-/// them and sets filters; a preloaded split builds its own and hands it over
+/// them, sets filters and accumulates read-time statistics ('selectivity_' and
+/// the lazy load counters); a preloaded split builds its own and hands it over
 /// whole. Only 'stableChildren()' is called from another thread, by read-ahead
 /// building the next reader tree, which also writes 'subscript_' on the
 /// children it lists.
@@ -232,6 +233,27 @@ class ScanSpec {
 
   SelectivityInfo& selectivity() {
     return selectivity_;
+  }
+
+  /// Marks this column as eligible for adaptive eager materialization, using
+  /// 'loadRatio' as the fraction of offered rows that must have been
+  /// materialized before it switches from lazy to eager. Set only for
+  /// remaining filter columns, and only when the feature is enabled, so the
+  /// flag doubles as the policy: an unmarked column never switches.
+  void setEagerMaterializeCandidate(bool value, double loadRatio);
+
+  /// Records that a LazyVector covering 'numRows' rows was handed out for this
+  /// column.
+  void recordLazyOffered(vector_size_t numRows);
+
+  /// Records that 'numRows' rows of this column were materialized, and whether
+  /// the load wrote through a ValueHook.
+  void recordLazyLoaded(vector_size_t numRows, bool usedValueHook);
+
+  /// True if this column should be read eagerly instead of being wrapped in a
+  /// LazyVector. Recomputed once per read by newRead().
+  bool eagerMaterialize() const {
+    return eagerMaterialize_;
   }
 
   ValueHook* valueHook() const {
@@ -489,6 +511,11 @@ class ScanSpec {
  private:
   void reorder();
 
+  // Derives 'eagerMaterialize_' from the lazy load counters. Called by
+  // newRead() on every child, once per read, so that read() and getValues()
+  // see one decision per batch.
+  void updateEagerMaterialize();
+
   void enableFilterInSubTree(bool value);
 
   bool compareTimeToDropValue(
@@ -540,6 +567,31 @@ class ScanSpec {
       metadataFilters_;
 
   SelectivityInfo selectivity_;
+
+  // True if this column may switch from lazy to eager based on the counters
+  // below. Only remaining filter columns are marked, and only when the feature
+  // is enabled.
+  bool eagerMaterializeCandidate_{false};
+
+  // Fraction of 'lazyRowsOffered_' that must have been materialized for the
+  // column to be read eagerly.
+  double eagerLoadRatio_{0.9};
+
+  // Rows handed out inside LazyVectors for this column.
+  int64_t lazyRowsOffered_{0};
+
+  // Rows of this column actually materialized by a lazy load. Always at most
+  // 'lazyRowsOffered_': a LazyVector loads at most once, over a subset of the
+  // rows it was created for.
+  int64_t lazyRowsLoaded_{0};
+
+  // True if a lazy load of this column ever wrote through a ValueHook, i.e.
+  // the column is an aggregation pushdown target. Reading it eagerly would
+  // defeat the pushdown, so this vetoes 'eagerMaterialize_' permanently.
+  bool usedValueHook_{false};
+
+  // The decision derived from the counters above by newRead().
+  bool eagerMaterialize_{false};
 
   std::vector<std::shared_ptr<ScanSpec>> children_;
 

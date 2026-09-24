@@ -136,6 +136,7 @@ bool shouldAggregateRuntimeMetric(const std::string& name) {
       "dataSourceLazyInputBytes",
       "dataSourceReadWallNanos",
       "driverCpuTimeNanos",
+      "eagerRemainingFilterColumns",
       "flushTimes",
       "ioWaitWallNanos",
       "prefetchBytes",

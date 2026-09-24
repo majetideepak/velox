@@ -194,6 +194,12 @@ class FileDataSource : public DataSource {
   // created.
   void configureExtractionColumns();
 
+  // Marks the remaining filter columns on the ScanSpec as candidates for
+  // adaptive eager materialization. Called from the constructor after
+  // scanSpec_ is final, since configureExtractionColumns() may rebuild it.
+  void configureEagerRemainingFilterColumns(
+      const config::ConfigBase* sessionProperties);
+
   /// Adds the information from column handle to the corresponding fields in
   /// this object.
   void processColumnHandle(const FileColumnHandlePtr& handle);
