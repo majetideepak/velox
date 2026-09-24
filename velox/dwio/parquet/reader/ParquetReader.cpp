@@ -1617,7 +1617,8 @@ class ParquetRowReader::Impl {
         readerBase_->fileMetaData(),
         readerBase->sessionTimezone(),
         options_.timestampPrecision(),
-        readerBase_->nullStructIfAllFieldsMissing());
+        readerBase_->nullStructIfAllFieldsMissing(),
+        options_.generateLazyChildren());
     requestedType_ = options_.requestedType() ? options_.requestedType()
                                               : readerBase_->schema();
     columnReader_ = ParquetColumnReader::build(

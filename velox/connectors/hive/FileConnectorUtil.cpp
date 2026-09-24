@@ -226,6 +226,8 @@ void configureRowReaderOptions(
         fileConfig->indexEnabled(sessionProperties));
     rowReaderOptions.setLazyColumnIo(
         fileConfig->nimbleLazyColumnIo(sessionProperties));
+    rowReaderOptions.setGenerateLazyChildren(
+        fileConfig->readerGenerateLazyColumns(sessionProperties));
     rowReaderOptions.setCollectColumnCpuMetrics(
         fileConfig->readerCollectColumnCpuMetrics(sessionProperties));
     rowReaderOptions.setStringDecoderZeroCopy(

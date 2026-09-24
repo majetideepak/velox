@@ -202,6 +202,18 @@ class FileConfig {
       "stats-based-filter-reorder-disabled";
 
   VELOX_HIVE_CONFIG(
+      kReaderGenerateLazyColumnsSession,
+      readerGenerateLazyColumns,
+      "reader.generate_lazy_columns",
+      bool,
+      true,
+      "Wrap projected columns without pushdown filters in LazyVector so that "
+      "they are read on first use. When disabled, such columns are read "
+      "eagerly. Only the Parquet reader honors this.")
+  static constexpr const char* kReaderGenerateLazyColumns =
+      "reader.generate-lazy-columns";
+
+  VELOX_HIVE_CONFIG(
       kIndexEnabledSession,
       indexEnabled,
       "index_enabled",

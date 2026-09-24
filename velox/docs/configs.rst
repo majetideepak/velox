@@ -913,6 +913,13 @@ Common Options
        filter execution order is totally determined by the filter type. Otherwise, the file
        reader will dynamically adjust the filter execution order based on the past filter
        execution stats. Session: ``stats_based_filter_reorder_disabled``.
+   * - ``reader.generate-lazy-columns``
+     - bool
+     - true
+     - If true, projected columns without a pushed down filter are wrapped in a lazy vector and
+       read when first accessed, so that columns the query discards after filtering are never
+       read. If false, such columns are read eagerly along with the filtered ones. Only the
+       Parquet reader honors this. Session: ``reader.generate_lazy_columns``.
    * - ``selective-nimble-reader-enabled``
      - bool
      - true
