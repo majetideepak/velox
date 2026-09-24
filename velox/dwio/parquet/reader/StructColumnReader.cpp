@@ -176,9 +176,7 @@ StructColumnReader::StructColumnReader(
           requestedType,
           fileType,
           params,
-          scanSpec,
-          /*isRoot=*/false,
-          params.generateLazyChildren()) {
+          scanSpec) {
   const auto stableChildren = scanSpec_->stableChildren();
   const auto& childSpecs = *stableChildren;
   for (auto i = 0; i < childSpecs.size(); ++i) {

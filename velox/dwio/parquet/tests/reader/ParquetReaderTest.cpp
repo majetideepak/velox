@@ -51,8 +51,7 @@ class ParquetReaderTest : public ParquetTestBase {
         reader.fileMetaData(),
         readerOptions.sessionTimezone(),
         TimestampPrecision::kMilliseconds,
-        /*nullStructIfAllFieldsMissing=*/false,
-        /*generateLazyChildren=*/true);
+        /*nullStructIfAllFieldsMissing=*/false);
     auto rootReader = ParquetColumnReader::build(
         makeColumnReaderOptions(readerOptions),
         reader.rowType(),
@@ -1622,44 +1621,6 @@ TEST_F(ParquetReaderTest, readBinaryAsStringFromNation) {
   EXPECT_EQ(
       expected,
       nameVector->loadedVector()->asFlatVector<StringView>()->valueAt(0));
-}
-
-TEST_F(ParquetReaderTest, generateLazyChildren) {
-  const std::string filename("nation.parquet");
-  auto outputRowType = ROW({"nationkey", "name"}, {BIGINT(), VARCHAR()});
-
-  auto readerOptions = makeDefaultReaderOptions();
-  readerOptions.setFileSchema(outputRowType);
-  auto reader = createReader(filename, readerOptions);
-
-  auto readFirstRow = [&](bool generateLazyChildren) {
-    auto rowReaderOpts = makeRowReaderOpts(outputRowType);
-    rowReaderOpts.setScanSpec(makeScanSpec(outputRowType));
-    rowReaderOpts.setGenerateLazyChildren(generateLazyChildren);
-    auto rowReader = reader->createRowReader(rowReaderOpts);
-    VectorPtr result = BaseVector::create(outputRowType, 0, leafPool_.get());
-    EXPECT_EQ(rowReader->next(1, result), 1);
-    return result;
-  };
-
-  {
-    auto result = readFirstRow(true);
-    auto* row = result->as<RowVector>();
-    EXPECT_TRUE(isLazyNotLoaded(*row->childAt(0)));
-    EXPECT_TRUE(isLazyNotLoaded(*row->childAt(1)));
-  }
-
-  {
-    auto result = readFirstRow(false);
-    auto* row = result->as<RowVector>();
-    // Both columns are projected out without a filter, so they would be lazy
-    // if generation were enabled.
-    EXPECT_FALSE(row->childAt(0)->isLazy());
-    EXPECT_FALSE(row->childAt(1)->isLazy());
-    EXPECT_EQ(row->childAt(0)->asFlatVector<int64_t>()->valueAt(0), 0);
-    EXPECT_EQ(
-        row->childAt(1)->asFlatVector<StringView>()->valueAt(0), "ALGERIA");
-  }
 }
 
 TEST_F(ParquetReaderTest, readComplexType) {

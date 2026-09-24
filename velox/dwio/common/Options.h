@@ -612,14 +612,6 @@ class RowReaderOptions {
     remainingFilterColumns_ = columns;
   }
 
-  bool generateLazyChildren() const {
-    return generateLazyChildren_;
-  }
-
-  void setGenerateLazyChildren(bool generateLazyChildren) {
-    generateLazyChildren_ = generateLazyChildren;
-  }
-
   bool collectColumnCpuMetrics() const {
     return collectColumnCpuMetrics_;
   }
@@ -706,9 +698,6 @@ class RowReaderOptions {
   // Defers I/O for projected columns without pushdown or remaining filters.
   bool lazyColumnIo_{false};
   folly::F14FastSet<std::string> remainingFilterColumns_;
-  // When false, projected columns are materialized during read() instead of
-  // being wrapped in LazyVector. Only the Parquet reader honors this.
-  bool generateLazyChildren_{true};
   bool collectColumnCpuMetrics_{false};
 };
 

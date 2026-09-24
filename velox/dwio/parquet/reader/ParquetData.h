@@ -38,14 +38,12 @@ class ParquetParams : public dwio::common::FormatParams {
       const FileMetaDataPtr metaData,
       const tz::TimeZone* sessionTimezone,
       TimestampPrecision timestampPrecision,
-      bool nullStructIfAllFieldsMissing,
-      bool generateLazyChildren)
+      bool nullStructIfAllFieldsMissing)
       : FormatParams(pool, stats),
         metaData_(metaData),
         sessionTimezone_(sessionTimezone),
         timestampPrecision_(timestampPrecision),
-        nullStructIfAllFieldsMissing_(nullStructIfAllFieldsMissing),
-        generateLazyChildren_(generateLazyChildren) {}
+        nullStructIfAllFieldsMissing_(nullStructIfAllFieldsMissing) {}
   std::unique_ptr<dwio::common::FormatData> toFormatData(
       const std::shared_ptr<const dwio::common::TypeWithId>& type,
       const common::ScanSpec& scanSpec) override;
@@ -62,17 +60,11 @@ class ParquetParams : public dwio::common::FormatParams {
     return nullStructIfAllFieldsMissing_;
   }
 
-  bool generateLazyChildren() const {
-    return generateLazyChildren_;
-  }
-
  private:
   const FileMetaDataPtr metaData_;
   const tz::TimeZone* sessionTimezone_;
   const TimestampPrecision timestampPrecision_;
   const bool nullStructIfAllFieldsMissing_;
-  // Whether struct readers wrap projected children in LazyVector.
-  const bool generateLazyChildren_;
 };
 
 /// Format-specific data created for each leaf column of a Parquet rowgroup.
