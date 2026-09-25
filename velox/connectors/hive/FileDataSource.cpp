@@ -27,6 +27,7 @@
 #include "velox/connectors/hive/ExtractionUtils.h"
 #include "velox/connectors/hive/FileConfig.h"
 #include "velox/expression/FieldReference.h"
+#include "velox/vector/LazyVector.h"
 
 using facebook::velox::common::testutil::TestValue;
 
@@ -626,6 +627,12 @@ int64_t FileDataSource::estimatedRowSize() {
 }
 
 vector_size_t FileDataSource::evaluateRemainingFilter(RowVectorPtr& rowVector) {
+  // Two loops on purpose. Merging them would block on the first field's round
+  // trip before the second field's had been issued, which is what the separate
+  // start pass avoids.
+  for (auto fieldIndex : multiReferencedFields_) {
+    LazyVector::startLoad(rowVector->childAt(fieldIndex));
+  }
   for (auto fieldIndex : multiReferencedFields_) {
     LazyVector::ensureLoadedRows(
         rowVector->childAt(fieldIndex),

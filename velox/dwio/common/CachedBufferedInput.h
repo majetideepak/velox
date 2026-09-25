@@ -211,6 +211,15 @@ class CachedBufferedInput : public BufferedInput {
   std::shared_ptr<cache::CoalescedLoad> coalescedLoad(
       const SeekableInputStream* stream);
 
+  /// Submits the planned load backing 'stream' to the IO executor and returns
+  /// without waiting for it. Call this for every stream a reader is about to
+  /// consume before it blocks on the first one, so that their IO overlaps
+  /// instead of running one round trip at a time on the reading thread. Does
+  /// nothing when there is no executor, when the load has already started, or
+  /// when another stream of the same coalesced group already submitted it. The
+  /// load counts as a prefetch because it runs ahead of the demand for it.
+  void startLoad(const SeekableInputStream* stream);
+
   folly::Executor* executor() const override {
     return executor_;
   }
@@ -234,14 +243,13 @@ class CachedBufferedInput : public BufferedInput {
  private:
   template <bool kSsd>
   std::vector<int32_t> groupRequests(
-      const std::vector<CacheRequest*>& requests,
-      bool prefetch) const;
+      const std::vector<CacheRequest*>& requests) const;
 
   // Makes a CoalescedLoad for 'requests' to be read together, coalescing IO is
-  // appropriate. If 'prefetch' is set, schedules the CoalescedLoad on
-  // 'executor_'. Links the CoalescedLoad to all CacheInputStreams that it
-  // concerns.
-  void readRegion(const std::vector<CacheRequest*>& requests, bool prefetch);
+  // appropriate. Links the CoalescedLoad to all CacheInputStreams that it
+  // concerns. The load is planned, not started; readRegions() starts the
+  // prefetched ones and startLoad() or the reading thread starts the rest.
+  void readRegion(const std::vector<CacheRequest*>& requests);
 
   // Read coalesced regions.  Regions are grouped together using `groupEnds'.
   // For example if there are 5 regions, 1 and 2 are coalesced together and 3,

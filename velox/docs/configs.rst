@@ -868,6 +868,13 @@ Common Options
      - integer
      - 8MB
      - Define the size of each coalesce load request. E.g. in Parquet scan, if it's bigger than rowgroup size then the whole row group can be fetched together. Otherwise, the row group will be fetched column chunk by column chunk. Session: ``load-quantum``.
+   * - ``start-column-loads-together``
+     - bool
+     - true
+     - Start the loads for all the columns a read consumes before decoding the first one, so that their IO overlaps
+       instead of running one round trip at a time on the reading thread. Reads no extra bytes, since the set of
+       columns whose loads start is exactly the set the read consumes. Has an effect only with the async data cache
+       and an IO executor. Session: ``start_column_loads_together``.
    * - ``num_cached_file_handles``
      - integer
      - 20000

@@ -19,6 +19,7 @@
 #include "velox/exec/OperatorType.h"
 #include "velox/expression/Expr.h"
 #include "velox/expression/FieldReference.h"
+#include "velox/vector/LazyVector.h"
 
 namespace facebook::velox::exec {
 namespace {
@@ -87,6 +88,11 @@ void loadReusedLazyVectors(
   }
 
   auto& children = input->children();
+  // Start every column's IO before loading any of it, so that the round trips
+  // overlap instead of running one at a time on this thread.
+  for (const auto inputChannel : reusedInputChannels) {
+    LazyVector::startLoad(children[inputChannel]);
+  }
   for (const auto inputChannel : reusedInputChannels) {
     if (isLazyNotLoaded(*children[inputChannel])) {
       children[inputChannel]->loadedVector();

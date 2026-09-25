@@ -275,23 +275,22 @@ void CachedBufferedInput::load(const LogType /*unused*/) {
 template <bool kSsd>
 void CachedBufferedInput::makeLoads(std::vector<CacheRequest*> requests[2]) {
   std::vector<int32_t> groupEnds[2];
-  groupEnds[1] = groupRequests<kSsd>(requests[1], true);
+  groupEnds[1] = groupRequests<kSsd>(requests[1]);
   moveCoalesced(
       requests[1],
       groupEnds[1],
       requests[0],
       [](auto* request) { return getOffset<kSsd>(*request); },
       [](auto* request) { return getOffset<kSsd>(*request) + request->size; });
-  groupEnds[0] = groupRequests<kSsd>(requests[0], false);
+  groupEnds[0] = groupRequests<kSsd>(requests[0]);
   readRegions(requests[1], true, groupEnds[1]);
   readRegions(requests[0], false, groupEnds[0]);
 }
 
 template <bool kSsd>
 std::vector<int32_t> CachedBufferedInput::groupRequests(
-    const std::vector<CacheRequest*>& requests,
-    bool prefetch) const {
-  if (requests.empty() || (requests.size() < 2 && !prefetch)) {
+    const std::vector<CacheRequest*>& requests) const {
+  if (requests.empty()) {
     return {};
   }
   const int32_t maxDistance = kSsd ? 20'000 : options_.maxCoalesceDistance();
@@ -526,9 +525,8 @@ class SsdLoad : public DwioCoalescedLoadBase {
 } // namespace
 
 void CachedBufferedInput::readRegion(
-    const std::vector<CacheRequest*>& requests,
-    bool prefetch) {
-  if (requests.empty() || (requests.size() == 1 && !prefetch)) {
+    const std::vector<CacheRequest*>& requests) {
+  if (requests.empty()) {
     return;
   }
 
@@ -572,7 +570,7 @@ void CachedBufferedInput::readRegions(
     while (requestIdx < groupEndIdx) {
       requestGroup.push_back(requests[requestIdx++]);
     }
-    readRegion(requestGroup, prefetch);
+    readRegion(requestGroup);
     requestGroup.clear();
   }
 
@@ -620,6 +618,25 @@ std::shared_ptr<cache::CoalescedLoad> CachedBufferedInput::coalescedLoad(
           loads.erase(request.stream);
         }
         return load;
+      });
+}
+
+void CachedBufferedInput::startLoad(const SeekableInputStream* stream) {
+  if (executor_ == nullptr) {
+    return;
+  }
+  // Takes the load out of 'streamToCoalescedLoad_' for all the streams of the
+  // group, so the group is submitted once however many of its streams ask. The
+  // streams that no longer find it fall back to loadSync(), which waits on the
+  // entry this load is filling rather than fetching it again.
+  auto load = coalescedLoad(stream);
+  if (load == nullptr ||
+      load->state() != cache::CoalescedLoad::State::kPlanned) {
+    return;
+  }
+  executor_->add(
+      [pendingLoad = std::move(load), ssdSavable = options_.cacheable()]() {
+        pendingLoad->loadOrFuture(nullptr, ssdSavable);
       });
 }
 

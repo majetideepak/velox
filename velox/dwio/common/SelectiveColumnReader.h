@@ -155,6 +155,13 @@ class SelectiveColumnReader {
   /// Returns list of child readers, empty for leaf readers.
   virtual const std::vector<SelectiveColumnReader*>& children() const;
 
+  /// Starts the loads for the streams of 'this' and of its children and returns
+  /// without waiting for any of them. Call this for every column a read is
+  /// about to consume before decoding the first, so that their IO overlaps
+  /// instead of running one round trip at a time on the reading thread. Does
+  /// nothing for formats that do not read through the async data cache.
+  void startLoad();
+
   /**
    * Read the next group of values into a RowVector.
    * @param numValues the number of values to read

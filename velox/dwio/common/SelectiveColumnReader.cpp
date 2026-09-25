@@ -90,6 +90,17 @@ const std::vector<SelectiveColumnReader*>& SelectiveColumnReader::children()
   return empty;
 }
 
+void SelectiveColumnReader::startLoad() {
+  formatData_->startLoad();
+  // Struct and repeated readers hold their streams in their leaves, so the walk
+  // has to reach the leaves the way enqueueRowGroup() does.
+  for (auto* child : children()) {
+    if (child != nullptr) {
+      child->startLoad();
+    }
+  }
+}
+
 void SelectiveColumnReader::seekTo(int64_t offset, bool readsNullsOnly) {
   if (offset == readOffset_) {
     return;

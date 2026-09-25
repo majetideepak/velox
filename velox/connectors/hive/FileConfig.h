@@ -192,6 +192,17 @@ class FileConfig {
   static constexpr const char* kLoadQuantum = "load-quantum";
 
   VELOX_HIVE_CONFIG(
+      kStartColumnLoadsTogetherSession,
+      startColumnLoadsTogether,
+      "start_column_loads_together",
+      bool,
+      true,
+      "Start the loads for all the columns a read consumes before decoding the "
+      "first one, so that their IO overlaps.")
+  static constexpr const char* kStartColumnLoadsTogether =
+      "start-column-loads-together";
+
+  VELOX_HIVE_CONFIG(
       kReadStatsBasedFilterReorderDisabledSession,
       readStatsBasedFilterReorderDisabled,
       "stats_based_filter_reorder_disabled",

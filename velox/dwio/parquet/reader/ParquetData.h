@@ -103,6 +103,14 @@ class ParquetData : public dwio::common::FormatData {
     return reader_.get();
   }
 
+  void startLoad() override {
+    // 'reader_' is null for non-leaf columns and for leaves before
+    // seekToRowGroup() moves the enqueued stream into a PageReader.
+    if (reader_ != nullptr) {
+      reader_->startLoad();
+    }
+  }
+
   // Reads null flags for 'numValues' next top level rows. The first
   // 'numValues' bits of 'nulls' are set and the reader is advanced by
   // numValues'.

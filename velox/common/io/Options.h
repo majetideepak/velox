@@ -132,6 +132,13 @@ class ReaderOptions {
     return *this;
   }
 
+  /// Modifies whether the loads for all the columns a read consumes are started
+  /// before the first one is decoded.
+  ReaderOptions& setStartColumnLoadsTogether(bool startTogether) {
+    startColumnLoadsTogether_ = startTogether;
+    return *this;
+  }
+
   /// Gets the memory allocator.
   velox::memory::MemoryPool& memoryPool() const {
     return *pool_;
@@ -163,6 +170,10 @@ class ReaderOptions {
 
   int64_t prefetchRowGroups() const {
     return prefetchRowGroups_;
+  }
+
+  bool startColumnLoadsTogether() const {
+    return startColumnLoadsTogether_;
   }
 
   bool cacheable() const {
@@ -212,6 +223,7 @@ class ReaderOptions {
   int32_t maxCoalesceDistance_{kDefaultCoalesceDistance};
   int64_t maxCoalesceBytes_{kDefaultCoalesceBytes};
   int32_t prefetchRowGroups_{kDefaultPrefetchRowGroups};
+  bool startColumnLoadsTogether_{true};
   bool cacheable_{true};
 };
 } // namespace facebook::velox::io

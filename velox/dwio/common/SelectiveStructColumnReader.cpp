@@ -391,6 +391,26 @@ void SelectiveStructColumnReaderBase::next(
   }
 }
 
+bool SelectiveStructColumnReaderBase::readsChildFromFile(
+    const velox::common::ScanSpec& childSpec) const {
+  if (childSpec.deltaUpdate() || isChildConstant(childSpec) ||
+      !childSpec.readFromFile()) {
+    return false;
+  }
+  const auto* reader = children_.at(childSpec.subscript());
+  return !(
+      reader->isTopLevel() && childSpec.projectOut() &&
+      !childSpec.hasFilter() && generateLazyChildren_);
+}
+
+void SelectiveStructColumnReaderBase::startChildLoads() {
+  for (const auto& childSpec : scanSpec_->children()) {
+    if (readsChildFromFile(*childSpec)) {
+      children_.at(childSpec->subscript())->startLoad();
+    }
+  }
+}
+
 void SelectiveStructColumnReaderBase::readFlatMapChildren(
     int64_t offset,
     const RowSet& rows,
@@ -421,6 +441,9 @@ void SelectiveStructColumnReaderBase::readFlatMapChildren(
   // Separate the loop to be cache friendly.
   for (auto* child : children_) {
     advanceFieldReader(child, offset);
+    if (columnReaderOptions_.startColumnLoadsTogether_) {
+      child->startLoad();
+    }
   }
   for (auto* child : children_) {
     child->readWithTiming(offset, activeRows, mapNulls);
@@ -474,6 +497,15 @@ void SelectiveStructColumnReaderBase::read(
   // (e.g., when all struct fields are renamed/deleted).
   if (columnReaderOptions_.columnMappingMode_ != ColumnMappingMode::kName) {
     VELOX_CHECK(!childSpecs.empty());
+  }
+  // Start every child's IO before decoding any of it. Without this the loop
+  // below blocks on child 0's round trip before child 1's has been issued, so K
+  // columns cost K round trips in sequence. This runs before the loop's
+  // advanceFieldReader() calls, so it starts the load for the position the
+  // reader is at now; the formats whose stream position depends on
+  // advanceFieldReader() do not override FormatData::startLoad().
+  if (columnReaderOptions_.startColumnLoadsTogether_) {
+    startChildLoads();
   }
   for (size_t i = 0; i < childSpecs.size(); ++i) {
     const auto& childSpec = childSpecs[i];
