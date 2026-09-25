@@ -166,6 +166,35 @@ void selectBaseRowsToLoad(
 } // namespace
 
 // static
+void LazyVector::startLoad(const VectorPtr& vector) {
+  if (vector == nullptr || !isLazyNotLoaded(*vector)) {
+    return;
+  }
+  switch (vector->encoding()) {
+    case VectorEncoding::Simple::LAZY: {
+      auto* lazyVector = vector->asUnchecked<LazyVector>();
+      if (lazyVector->isLoaded()) {
+        // The loaded vector can itself be lazy.
+        startLoad(lazyVector->vector_);
+      } else {
+        lazyVector->loader_->start();
+      }
+      return;
+    }
+    case VectorEncoding::Simple::ROW:
+      for (const auto& child : vector->asUnchecked<RowVector>()->children()) {
+        startLoad(child);
+      }
+      return;
+    default:
+      // A dictionary or constant wrapper does not change which bytes the load
+      // fetches, so descend through it.
+      startLoad(vector->valueVector());
+      return;
+  }
+}
+
+// static
 void LazyVector::ensureLoadedRowsImpl(
     const VectorPtr& vector,
     DecodedVector& decoded,

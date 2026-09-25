@@ -1114,6 +1114,10 @@ struct WriterOptions {
 struct ColumnReaderOptions {
   /// How to map table fields to file fields.
   ColumnMappingMode columnMappingMode_{ColumnMappingMode::kPosition};
+
+  /// Whether a struct reader starts the loads for all the columns a read
+  /// consumes before decoding the first one, so that their IO overlaps.
+  bool startColumnLoadsTogether_{true};
 };
 
 ColumnReaderOptions makeColumnReaderOptions(const ReaderOptions& options);

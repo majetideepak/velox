@@ -81,6 +81,8 @@ std::string formatSessionProperty(FileFormat fmt, std::string_view key) {
 ColumnReaderOptions makeColumnReaderOptions(const ReaderOptions& options) {
   ColumnReaderOptions columnReaderOptions;
   columnReaderOptions.columnMappingMode_ = options.columnMappingMode();
+  columnReaderOptions.startColumnLoadsTogether_ =
+      options.startColumnLoadsTogether();
   return columnReaderOptions;
 }
 

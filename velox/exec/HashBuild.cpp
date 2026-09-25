@@ -25,6 +25,7 @@
 #include "velox/exec/Task.h"
 #include "velox/exec/VectorHasher.h"
 #include "velox/expression/FieldReference.h"
+#include "velox/vector/LazyVector.h"
 
 using facebook::velox::common::testutil::TestValue;
 
@@ -455,6 +456,11 @@ void HashBuild::addInput(RowVectorPtr input) {
 
   auto& hashers = table_->hashers();
 
+  // Start every key column's IO before loading any of it, so that the round
+  // trips overlap instead of running one at a time on this thread.
+  for (auto i = 0; i < hashers.size(); ++i) {
+    LazyVector::startLoad(input->childAt(hashers[i]->channel()));
+  }
   for (auto i = 0; i < hashers.size(); ++i) {
     auto key = input->childAt(hashers[i]->channel())->loadedVector();
     hashers[i]->decode(*key, activeRows_);
@@ -493,6 +499,9 @@ void HashBuild::addInput(RowVectorPtr input) {
     }
   }
 
+  for (auto i = 0; i < dependentChannels_.size(); ++i) {
+    LazyVector::startLoad(input->childAt(dependentChannels_[i]));
+  }
   for (auto i = 0; i < dependentChannels_.size(); ++i) {
     decoders_[i]->decode(
         *input->childAt(dependentChannels_[i])->loadedVector(), activeRows_);

@@ -19,6 +19,7 @@
 #include "velox/exec/OperatorType.h"
 #include "velox/exec/OperatorUtils.h"
 #include "velox/exec/Task.h"
+#include "velox/vector/LazyVector.h"
 
 namespace facebook::velox::exec {
 
@@ -275,7 +276,12 @@ void PartitionedOutput::initializeInput(RowVectorPtr input) {
         outputColumns);
   }
 
-  // Lazy load all the input columns.
+  // Lazy load all the input columns. Start every column's IO before loading any
+  // of it, so that the round trips overlap instead of running one at a time on
+  // this thread.
+  for (auto i = 0; i < output_->childrenSize(); ++i) {
+    LazyVector::startLoad(output_->childAt(i));
+  }
   for (auto i = 0; i < output_->childrenSize(); ++i) {
     output_->childAt(i)->loadedVector();
   }

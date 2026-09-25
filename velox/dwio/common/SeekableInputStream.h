@@ -44,6 +44,12 @@ class SeekableInputStream : public google::protobuf::io::ZeroCopyInputStream {
 
   virtual bool SkipInt64(int64_t count) = 0;
 
+  // Starts any pending load for the current position and returns without
+  // waiting for it. Called before a batch of streams is read so that their IO
+  // overlaps. The default is a no-op; implementations that load on demand
+  // override it.
+  virtual void startLoad() {}
+
   bool Skip(int32_t count) final override {
     VELOX_FAIL("Use SkipInt64 instead: {}", count);
   }
