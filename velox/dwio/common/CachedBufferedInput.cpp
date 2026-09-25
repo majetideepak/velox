@@ -242,6 +242,21 @@ void CachedBufferedInput::load(const LogType /*unused*/) {
     const int loadIndex =
         (prefetchAnyway || isPrefetchPct(adjustedReadPct(trackingData))) ? 1
                                                                          : 0;
+    // TEMPORARY probe. Not for commit.
+    LOG(INFO) << "PREFETCHDBG file=" << fileNum_.id()
+              << " trackingId=" << request.trackingId.id()
+              << " emptyId=" << (request.trackingId.empty() ? 1 : 0)
+              << " prefetchAnyway=" << (prefetchAnyway ? 1 : 0)
+              << " hasTracker=" << (tracker_ != nullptr ? 1 : 0)
+              << " size=" << request.size << " offset=" << request.key.offset
+              << " read=" << static_cast<int64_t>(trackingData.readBytes)
+              << " referenced="
+              << static_cast<int64_t>(trackingData.referencedBytes)
+              << " lastReferenced="
+              << static_cast<int64_t>(trackingData.lastReferencedBytes)
+              << " pct=" << adjustedReadPct(trackingData)
+              << " minPct=" << FLAGS_cache_prefetch_min_pct
+              << " loadIndex=" << loadIndex;
     auto parts = makeRequestParts(
         request, trackingData, options_.loadQuantum(), extraRequests);
     for (auto part : parts) {
@@ -552,6 +567,43 @@ void CachedBufferedInput::readRegion(
   });
 }
 
+namespace {
+
+// TEMPORARY probe. Not for commit. Submits 'load' the way both submit sites do,
+// logging the group it submitted and the span of the task that runs it, so a
+// log join can tell a planned-and-submitted load from a planned-and-abandoned
+// one. 'via' names the submit site: "regions" for the speculative bucket that
+// readRegions() submits, "start" for CachedBufferedInput::startLoad().
+void submitLoadAndLog(
+    folly::Executor* executor,
+    std::shared_ptr<cache::CoalescedLoad> load,
+    bool ssdSavable,
+    uint64_t fileNum,
+    const char* via) {
+  auto* dwioLoad = checkedPointerCast<DwioCoalescedLoadBase>(load.get());
+  const auto& loadRequests = dwioLoad->requests();
+  const int64_t loadOffset = loadRequests.empty()
+      ? -1
+      : static_cast<int64_t>(loadRequests[0].key.offset);
+  int64_t loadBytes{0};
+  for (const auto& request : loadRequests) {
+    loadBytes += request.size;
+  }
+  LOG(INFO) << "SUBMITDBG file=" << fileNum << " offset=" << loadOffset
+            << " numRequests=" << loadRequests.size() << " bytes=" << loadBytes
+            << " via=" << via;
+  executor->add(
+      [pendingLoad = std::move(load), ssdSavable, fileNum, loadOffset, via]() {
+        LOG(INFO) << "RUNDBG file=" << fileNum << " offset=" << loadOffset
+                  << " phase=begin via=" << via;
+        pendingLoad->loadOrFuture(nullptr, ssdSavable);
+        LOG(INFO) << "RUNDBG file=" << fileNum << " offset=" << loadOffset
+                  << " phase=end via=" << via;
+      });
+}
+
+} // namespace
+
 void CachedBufferedInput::readRegions(
     const std::vector<CacheRequest*>& requests,
     bool prefetch,
@@ -579,10 +631,8 @@ void CachedBufferedInput::readRegions(
     for (auto i = startIndex; i < coalescedLoads_.size(); ++i) {
       auto& load = coalescedLoads_[i];
       if (load->state() == CoalescedLoad::State::kPlanned) {
-        executor_->add(
-            [pendingLoad = load, ssdSavable = options_.cacheable()]() {
-              pendingLoad->loadOrFuture(nullptr, ssdSavable);
-            });
+        submitLoadAndLog(
+            executor_, load, options_.cacheable(), fileNum_.id(), "regions");
       }
     }
     // Remove the loads that were complete. There can be done loads if the same
@@ -634,10 +684,8 @@ void CachedBufferedInput::startLoad(const SeekableInputStream* stream) {
       load->state() != cache::CoalescedLoad::State::kPlanned) {
     return;
   }
-  executor_->add(
-      [pendingLoad = std::move(load), ssdSavable = options_.cacheable()]() {
-        pendingLoad->loadOrFuture(nullptr, ssdSavable);
-      });
+  submitLoadAndLog(
+      executor_, std::move(load), options_.cacheable(), fileNum_.id(), "start");
 }
 
 void CachedBufferedInput::reset() {

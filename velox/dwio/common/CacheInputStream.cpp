@@ -337,8 +337,15 @@ void CacheInputStream::loadPosition() {
 
   if (pin_.empty()) {
     VELOX_CHECK(!preloaded_, "Preloaded stream must always have a valid pin");
+    // TEMPORARY probe state. Not for commit. 'loadState' is the state of the
+    // load backing this touch as of the moment the reader reached it: -1 when
+    // there was no load at all, otherwise CoalescedLoad::State.
+    int32_t loadState{-1};
+    uint64_t coalescedUs{0};
+    uint64_t syncUs{0};
     auto load = bufferedInput_->coalescedLoad(this);
     if (load != nullptr) {
+      loadState = static_cast<int32_t>(load->state());
       folly::SemiFuture<bool> waitFuture(false);
       uint64_t loadUs{0};
       {
@@ -353,6 +360,7 @@ void CacheInputStream::loadPosition() {
           LOG(ERROR) << "IOERR: error in coalesced load " << e.what();
         }
       }
+      coalescedUs = loadUs;
       ioStats_->queryThreadIoLatencyUs().increment(loadUs);
       if (load->isSsdLoad()) {
         ioStats_->coalescedSsdLoadLatencyUs().increment(loadUs);
@@ -364,7 +372,19 @@ void CacheInputStream::loadPosition() {
     const auto nextLoadRegion = nextQuantizedLoadRegion(position_);
     // There is no need to update the metric in the loadData method because
     // loadSync is always executed regardless and updates the metric.
-    loadSync(nextLoadRegion);
+    {
+      MicrosecondWallTimer timer(&syncUs);
+      loadSync(nextLoadRegion);
+    }
+    // TEMPORARY probe. Not for commit. One line per touch that had to reach the
+    // cache, on the thread that paid for it, so a log join can split the wait
+    // by column, by state and by driver versus IO thread.
+    LOG(INFO) << "TOUCHDBG file=" << fileNum_
+              << " trackingId=" << trackingId_.id()
+              << " regionOffset=" << region_.offset
+              << " offset=" << nextLoadRegion.offset
+              << " size=" << nextLoadRegion.length << " state=" << loadState
+              << " coalescedUs=" << coalescedUs << " syncUs=" << syncUs;
   }
 
   auto* entry = pin_.checkedEntry();
