@@ -60,6 +60,12 @@ RowSet read(
   // rows it was offered gains nothing from being lazy.
   fieldReader->scanSpec()->recordLazyLoaded(
       effectiveRows.size(), hook != nullptr);
+  // 'loaded' close to 'offered' means the LazyVector deferred work that
+  // happened anyway.
+  LOG(INFO) << "Lazy load: column=" << fieldReader->scanSpec()->fieldName()
+            << " offered=" << outputRows.size()
+            << " loaded=" << effectiveRows.size()
+            << " valueHook=" << (hook != nullptr);
   fieldReader->scanSpec()->setValueHook(hook);
   fieldReader->readWithTiming(offset, effectiveRows, incomingNulls);
   if (fieldReader->fileType().type()->isRow() ||

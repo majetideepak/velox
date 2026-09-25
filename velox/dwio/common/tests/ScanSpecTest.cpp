@@ -110,6 +110,184 @@ TEST_F(ScanSpecTest, setFilterResetsHasFilter) {
   ASSERT_TRUE(scanSpec.hasFilter());
 }
 
+// Offers of this size clear the minimum in a single call.
+constexpr vector_size_t kMinRows = ScanSpec::kMinLazyRowsOffered;
+
+TEST_F(ScanSpecTest, eagerMaterializeNeedsMinimumRows) {
+  ScanSpec scanSpec("<root>");
+  auto* child = scanSpec.addField("c0", 0);
+  child->setEagerMaterializeCandidate(true, 1.0);
+
+  // Every offered row was loaded, but too few rows to trust the ratio.
+  child->recordLazyOffered(kMinRows - 1);
+  child->recordLazyLoaded(kMinRows - 1, false);
+  scanSpec.newRead();
+  EXPECT_FALSE(child->eagerMaterialize());
+
+  child->recordLazyOffered(1);
+  child->recordLazyLoaded(1, false);
+  scanSpec.newRead();
+  EXPECT_TRUE(child->eagerMaterialize());
+}
+
+TEST_F(ScanSpecTest, eagerMaterializeLoadRatio) {
+  const auto decide =
+      [](vector_size_t offered, vector_size_t loaded, double loadRatio) {
+        ScanSpec scanSpec("<root>");
+        auto* child = scanSpec.addField("c0", 0);
+        child->setEagerMaterializeCandidate(true, loadRatio);
+        child->recordLazyOffered(offered);
+        child->recordLazyLoaded(loaded, false);
+        scanSpec.newRead();
+        return child->eagerMaterialize();
+      };
+
+  EXPECT_TRUE(decide(2000, 1800, 0.9));
+  EXPECT_FALSE(decide(2000, 1799, 0.9));
+
+  // A column behind a short circuiting conjunct: the remaining filter rarely
+  // evaluates it, so deferring the read is what the LazyVector is for.
+  EXPECT_FALSE(decide(100 * kMinRows, kMinRows, 0.9));
+  EXPECT_FALSE(decide(100 * kMinRows, 0, 0.9));
+
+  // A ratio of 1.0 demands that every offered row was loaded.
+  EXPECT_TRUE(decide(2048, 2048, 1.0));
+  EXPECT_FALSE(decide(2048, 2047, 1.0));
+}
+
+TEST_F(ScanSpecTest, eagerMaterializeLoadRatioBounds) {
+  ScanSpec scanSpec("<root>");
+  auto* child = scanSpec.addField("c0", 0);
+  EXPECT_THROW(
+      child->setEagerMaterializeCandidate(true, 0.0), VeloxRuntimeError);
+  EXPECT_THROW(
+      child->setEagerMaterializeCandidate(true, 1.5), VeloxRuntimeError);
+}
+
+TEST_F(ScanSpecTest, eagerMaterializeOnlyForCandidates) {
+  ScanSpec scanSpec("<root>");
+  auto* notCandidate = scanSpec.addField("c0", 0);
+  auto* hookTarget = scanSpec.addField("c1", 1);
+  hookTarget->setEagerMaterializeCandidate(true, 0.9);
+
+  notCandidate->recordLazyOffered(2 * kMinRows);
+  notCandidate->recordLazyLoaded(2 * kMinRows, false);
+  hookTarget->recordLazyOffered(2 * kMinRows);
+  // One load wrote through a ValueHook, so the column is an aggregation
+  // pushdown target. Reading it eagerly would defeat the pushdown however well
+  // its loads cover the rows they were offered.
+  hookTarget->recordLazyLoaded(kMinRows, true);
+  hookTarget->recordLazyLoaded(kMinRows, false);
+
+  scanSpec.newRead();
+  EXPECT_FALSE(notCandidate->eagerMaterialize());
+  EXPECT_FALSE(hookTarget->eagerMaterialize());
+
+  // The veto does not lapse once later loads stop using a hook.
+  hookTarget->recordLazyOffered(kMinRows);
+  hookTarget->recordLazyLoaded(kMinRows, false);
+  scanSpec.newRead();
+  EXPECT_FALSE(hookTarget->eagerMaterialize());
+}
+
+// An eager column produces no LazyVector, so its counters stop moving and the
+// decision holds for the rest of the query.
+TEST_F(ScanSpecTest, eagerMaterializeHoldsWithoutNewOffers) {
+  ScanSpec scanSpec("<root>");
+  auto* child = scanSpec.addField("c0", 0);
+  child->setEagerMaterializeCandidate(true, 0.9);
+  child->recordLazyOffered(2 * kMinRows);
+  child->recordLazyLoaded(2 * kMinRows, false);
+  scanSpec.newRead();
+  ASSERT_TRUE(child->eagerMaterialize());
+
+  for (int i = 0; i < 10; ++i) {
+    scanSpec.newRead();
+    EXPECT_TRUE(child->eagerMaterialize());
+  }
+}
+
+// moveAdaptationFrom is the only channel that carries the decision to the next
+// split, both for a preloaded spec and for one rebuilt from scratch. A field
+// left behind silently restarts the learning on every split.
+TEST_F(ScanSpecTest, moveAdaptationFromCarriesEagerMaterialize) {
+  const auto addFields = [](ScanSpec& spec) {
+    spec.addField("switched", 0);
+    spec.addField("learning", 1);
+    spec.addField("hookTarget", 2);
+    spec.addField("constant", 3);
+  };
+
+  ScanSpec from("<root>");
+  addFields(from);
+  from.childByName("switched")->setEagerMaterializeCandidate(true, 0.9);
+  from.childByName("switched")->recordLazyOffered(2 * kMinRows);
+  from.childByName("switched")->recordLazyLoaded(2 * kMinRows, false);
+  // Still below the minimum, so this split reaches no decision and the next one
+  // has to finish the measurement with the carried counters and threshold.
+  from.childByName("learning")->setEagerMaterializeCandidate(true, 0.5);
+  from.childByName("learning")->recordLazyOffered(512);
+  from.childByName("learning")->recordLazyLoaded(300, false);
+  from.childByName("hookTarget")->setEagerMaterializeCandidate(true, 0.9);
+  from.childByName("hookTarget")->recordLazyOffered(2 * kMinRows);
+  from.childByName("hookTarget")->recordLazyLoaded(2 * kMinRows, true);
+  from.childByName("constant")->setEagerMaterializeCandidate(true, 0.9);
+  from.childByName("constant")->recordLazyOffered(2 * kMinRows);
+  from.childByName("constant")->recordLazyLoaded(2 * kMinRows, false);
+  from.newRead();
+  ASSERT_TRUE(from.childByName("switched")->eagerMaterialize());
+
+  ScanSpec to("<root>");
+  addFields(to);
+  to.childByName("constant")
+      ->setConstantValue(BaseVector::createConstant(BIGINT(), 1LL, 1, pool()));
+  to.moveAdaptationFrom(from);
+
+  // The decision itself carries, so the first read of the new split is already
+  // eager rather than measuring again from zero.
+  EXPECT_TRUE(to.childByName("switched")->eagerMaterialize());
+
+  to.childByName("learning")->recordLazyOffered(1536);
+  to.childByName("learning")->recordLazyLoaded(725, false);
+  to.newRead();
+  EXPECT_TRUE(to.childByName("switched")->eagerMaterialize());
+  // 1025 of 2048 offered rows: accepted by the carried 0.5 and rejected by the
+  // 0.9 default, so both the counters and the threshold travelled.
+  EXPECT_TRUE(to.childByName("learning")->eagerMaterialize());
+  EXPECT_FALSE(to.childByName("hookTarget")->eagerMaterialize());
+  // A constant is never lazy, so it receives no adaptation.
+  EXPECT_FALSE(to.childByName("constant")->eagerMaterialize());
+}
+
+// The lazy counters are deliberately a separate field pair from 'selectivity_',
+// which feeds compareTimeToDropValue.
+TEST_F(ScanSpecTest, eagerMaterializeDoesNotAffectFilterOrder) {
+  ScanSpec scanSpec("<root>");
+  scanSpec.addField("c0", 0);
+  auto* candidate = scanSpec.addField("c1", 1);
+  scanSpec.addField("c2", 2)->setFilter(
+      std::make_shared<BigintRange>(10, 20, false));
+  scanSpec.resetCachedValues(false);
+
+  candidate->setEagerMaterializeCandidate(true, 0.9);
+  candidate->recordLazyOffered(2 * kMinRows);
+  candidate->recordLazyLoaded(2 * kMinRows, false);
+  scanSpec.newRead();
+  ASSERT_TRUE(candidate->eagerMaterialize());
+
+  // The only filtered child still sorts first, the rest stay in name order.
+  std::vector<std::string> order;
+  for (const auto& child : scanSpec.children()) {
+    order.push_back(child->fieldName());
+  }
+  EXPECT_THAT(order, ElementsAre("c2", "c0", "c1"));
+
+  // An unfiltered column accumulates no filter statistics, so a non-zero
+  // numIn() never makes it participate in stats based reordering.
+  EXPECT_EQ(candidate->selectivity().numIn(), 0);
+  EXPECT_EQ(candidate->selectivity().numOut(), 0);
+}
+
 TEST_F(ScanSpecTest, testFilterOnConstant) {
   auto test = [&](auto&& setup, bool expected) {
     ScanSpec scanSpec("<root>");

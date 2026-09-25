@@ -4255,6 +4255,147 @@ TEST_F(
   ASSERT_TRUE(waitForTaskCompletion(cursor->task().get()));
 }
 
+// A remaining filter column whose lazy loads keep covering the rows they were
+// offered switches to an eager read. The counters accumulate across splits, so
+// splits too small to decide on their own still add up to a decision.
+TEST_F(TableScanTest, remainingFilterEagerAcrossSplits) {
+  // Deliberately below ScanSpec::kMinLazyRowsOffered, so no single split
+  // gathers enough evidence on its own.
+  constexpr int kRowsPerSplit = 600;
+  constexpr int kNumSplits = 4;
+  std::vector<RowVectorPtr> vectors;
+  std::vector<std::shared_ptr<TempFilePath>> files;
+  for (int i = 0; i < kNumSplits; ++i) {
+    vectors.push_back(makeRowVector({
+        makeFlatVector<int64_t>(kRowsPerSplit, folly::identity),
+        makeFlatVector<int64_t>(kRowsPerSplit, folly::identity),
+        makeFlatVector<int64_t>(kRowsPerSplit, folly::identity),
+    }));
+    files.push_back(TempFilePath::create());
+    writeToFile(files.back()->getPath(), {vectors.back()});
+  }
+  createDuckDbTable(vectors);
+
+  // 'c0' and 'c2' are both filtered on and projected out, so the remaining
+  // filter force loads them over the whole batch and every offered row ends up
+  // materialized. 'c1' is not referenced by the filter and is never a
+  // candidate.
+  const auto plan = PlanBuilder()
+                        .tableScan(
+                            asRowType(vectors[0]->type()),
+                            {},
+                            "NOT (c0 % 2 == 0 AND c2 % 3 == 0)")
+                        .planNode();
+  const std::string sql =
+      "SELECT * FROM tmp WHERE NOT (c0 % 2 = 0 AND c2 % 3 = 0)";
+  const auto makeSplits = [&] {
+    std::vector<exec::Split> splits;
+    for (const auto& file : files) {
+      splits.emplace_back(makeHiveConnectorSplit(file->getPath()));
+    }
+    return splits;
+  };
+
+  const auto lazyTask = AssertQueryBuilder(plan, duckDbQueryRunner_)
+                            .maxDrivers(1)
+                            .splits(makeSplits())
+                            .assertResults(sql);
+  EXPECT_EQ(
+      getTableScanRuntimeStats(lazyTask).count("eagerRemainingFilterColumns"),
+      0);
+
+  // Same results, and both filter columns switched exactly once.
+  const auto eagerTask =
+      AssertQueryBuilder(plan, duckDbQueryRunner_)
+          .maxDrivers(1)
+          .splits(makeSplits())
+          .connectorSessionProperty(
+              kHiveConnectorId,
+              connector::hive::FileConfig::kEagerRemainingFilterColumnsSession,
+              "true")
+          .assertResults(sql);
+  EXPECT_EQ(
+      getTableScanRuntimeStats(eagerTask)["eagerRemainingFilterColumns"].sum,
+      2);
+}
+
+// A column behind a short circuiting AND conjunct is loaded only over the rows
+// the earlier conjuncts left, so it keeps its LazyVector while the column the
+// filter always evaluates switches to an eager read.
+TEST_F(TableScanTest, remainingFilterEagerKeepsShortCircuitedColumnLazy) {
+  constexpr int kSize = 4096;
+  auto vector = makeRowVector({
+      makeFlatVector<int64_t>(kSize, folly::identity),
+      makeFlatVector<int64_t>(kSize, folly::identity),
+  });
+  auto file = TempFilePath::create();
+  writeToFile(file->getPath(), {vector});
+
+  CursorParameters params;
+  params.copyResult = false;
+  params.serialExecution = true;
+  params.planNode =
+      PlanBuilder()
+          .tableScan(
+              asRowType(vector->type()), {}, "c0 % 7 == 0 AND c1 % 2 == 0")
+          .planNode();
+  params.queryCtx = core::QueryCtx::create();
+  params.queryCtx->setConnectorSessionOverridesUnsafe(
+      kHiveConnectorId,
+      {{std::string(
+            connector::hive::FileConfig::kEagerRemainingFilterColumnsSession),
+        "true"}});
+
+  auto cursor = TaskCursor::create(params);
+  cursor->task()->addSplit(
+      "0", exec::Split(makeHiveConnectorSplit(file->getPath())));
+  cursor->task()->noMoreSplits("0");
+  int numRows = 0;
+  while (cursor->moveNext()) {
+    auto* result = cursor->current()->asUnchecked<RowVector>();
+    numRows += result->size();
+    // Loaded over the surviving rows only, which is the shape scatter() gives a
+    // partial load. An eager read would be flat under the filter's wrap.
+    auto* c1 = result->childAt(1)->loadedVector();
+    ASSERT_EQ(c1->encoding(), VectorEncoding::Simple::DICTIONARY);
+    ASSERT_EQ(
+        c1->asUnchecked<DictionaryVector<int64_t>>()->valueVector()->encoding(),
+        VectorEncoding::Simple::DICTIONARY);
+  }
+  // One row in fourteen passes both conjuncts.
+  EXPECT_EQ(numRows, 293);
+  ASSERT_TRUE(waitForTaskCompletion(cursor->task().get()));
+  // Only 'c0' switched.
+  EXPECT_EQ(
+      getTableScanRuntimeStats(cursor->task())["eagerRemainingFilterColumns"]
+          .sum,
+      1);
+}
+
+TEST_F(TableScanTest, remainingFilterEagerInvalidLoadRatio) {
+  auto vector = makeRowVector({makeFlatVector<int64_t>(10, folly::identity)});
+  auto file = TempFilePath::create();
+  writeToFile(file->getPath(), {vector});
+  const auto plan = PlanBuilder()
+                        .tableScan(asRowType(vector->type()), {}, "c0 % 2 == 0")
+                        .planNode();
+
+  VELOX_ASSERT_THROW(
+      AssertQueryBuilder(plan)
+          .split(makeHiveConnectorSplit(file->getPath()))
+          .connectorSessionProperty(
+              kHiveConnectorId,
+              connector::hive::FileConfig::kEagerRemainingFilterColumnsSession,
+              "true")
+          .connectorSessionProperty(
+              kHiveConnectorId,
+              connector::hive::FileConfig::
+                  kEagerRemainingFilterColumnsLoadRatioSession,
+              "1.5")
+          .copyResults(pool()),
+      "must be in (0, 1]");
+}
+
 TEST_F(TableScanTest, remainingFilterSkippedStrides) {
   auto rowType = ROW({{"c0", BIGINT()}, {"c1", BIGINT()}});
   std::vector<RowVectorPtr> vectors(3);

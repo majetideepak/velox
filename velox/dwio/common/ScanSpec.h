@@ -235,6 +235,12 @@ class ScanSpec {
     return selectivity_;
   }
 
+  /// Rows that must have been offered inside LazyVectors before the load ratio
+  /// is trusted. One default batch, so a single unrepresentative batch at the
+  /// start of a split cannot decide the column. Mirrors the numIn() guard that
+  /// compareTimeToDropValue applies before trusting filter selectivity.
+  static constexpr int64_t kMinLazyRowsOffered{1024};
+
   /// Marks this column as eligible for adaptive eager materialization, using
   /// 'loadRatio' as the fraction of offered rows that must have been
   /// materialized before it switches from lazy to eager. Set only for

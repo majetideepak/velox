@@ -43,6 +43,9 @@ TEST(FileConfigTest, defaultConfig) {
   EXPECT_TRUE(
       config.readTimestampPartitionValueAsLocalTime(emptySession.get()));
   EXPECT_FALSE(config.readStatsBasedFilterReorderDisabled(emptySession.get()));
+  EXPECT_FALSE(config.eagerRemainingFilterColumns(emptySession.get()));
+  EXPECT_EQ(
+      config.eagerRemainingFilterColumnsLoadRatio(emptySession.get()), 0.9);
   EXPECT_FALSE(config.preserveFlatMapsInMemory(emptySession.get()));
   EXPECT_FALSE(config.indexEnabled(emptySession.get()));
   EXPECT_FALSE(config.readerCollectColumnCpuMetrics(emptySession.get()));
@@ -70,6 +73,8 @@ TEST(FileConfigTest, overrideConfig) {
       {FileConfig::kLoadQuantum, std::to_string(4 << 20)},
       {FileConfig::kFilePreloadThreshold, std::to_string(16UL << 20)},
       {FileConfig::kReadStatsBasedFilterReorderDisabled, "true"},
+      {FileConfig::kEagerRemainingFilterColumns, "true"},
+      {FileConfig::kEagerRemainingFilterColumnsLoadRatio, "0.75"},
       {FileConfig::kPreserveFlatMapsInMemory, "true"},
       {FileConfig::kIndexEnabled, "true"},
       {FileConfig::kReaderCollectColumnCpuMetrics, "true"},
@@ -97,6 +102,9 @@ TEST(FileConfigTest, overrideConfig) {
   EXPECT_EQ(config.loadQuantum(emptySession.get()), 4 << 20);
   EXPECT_EQ(config.filePreloadThreshold(), 16UL << 20);
   EXPECT_TRUE(config.readStatsBasedFilterReorderDisabled(emptySession.get()));
+  EXPECT_TRUE(config.eagerRemainingFilterColumns(emptySession.get()));
+  EXPECT_EQ(
+      config.eagerRemainingFilterColumnsLoadRatio(emptySession.get()), 0.75);
   EXPECT_TRUE(config.preserveFlatMapsInMemory(emptySession.get()));
   EXPECT_TRUE(config.indexEnabled(emptySession.get()));
   EXPECT_TRUE(config.readerCollectColumnCpuMetrics(emptySession.get()));
@@ -141,6 +149,8 @@ TEST(FileConfigTest, overrideSession) {
       {FileConfig::kMaxCoalescedDistanceSession, "3MB"},
       {FileConfig::kLoadQuantumSession, std::to_string(4 << 20)},
       {FileConfig::kReadStatsBasedFilterReorderDisabledSession, "true"},
+      {FileConfig::kEagerRemainingFilterColumnsSession, "true"},
+      {FileConfig::kEagerRemainingFilterColumnsLoadRatioSession, "0.5"},
       {FileConfig::kPreserveFlatMapsInMemorySession, "true"},
       {FileConfig::kIndexEnabledSession, "true"},
       {FileConfig::kReaderCollectColumnCpuMetricsSession, "true"},
@@ -165,6 +175,8 @@ TEST(FileConfigTest, overrideSession) {
   EXPECT_EQ(config.maxCoalescedDistanceBytes(session.get()), 3 << 20);
   EXPECT_EQ(config.loadQuantum(session.get()), 4 << 20);
   EXPECT_TRUE(config.readStatsBasedFilterReorderDisabled(session.get()));
+  EXPECT_TRUE(config.eagerRemainingFilterColumns(session.get()));
+  EXPECT_EQ(config.eagerRemainingFilterColumnsLoadRatio(session.get()), 0.5);
   EXPECT_TRUE(config.preserveFlatMapsInMemory(session.get()));
   EXPECT_TRUE(config.indexEnabled(session.get()));
   EXPECT_TRUE(config.readerCollectColumnCpuMetrics(session.get()));

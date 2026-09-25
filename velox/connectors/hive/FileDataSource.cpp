@@ -190,6 +190,9 @@ FileDataSource::FileDataSource(
       readColumnTypes.push_back(input->type());
     }
     remainingFilterColumns_ = std::move(remainingFilterColumns);
+    LOG(INFO) << fmt::format(
+        "Remaining filter columns: [{}]",
+        fmt::join(remainingFilterColumns_, ", "));
     remainingFilterSubfields_ = remainingFilterExpr->extractSubfields();
     if (VLOG_IS_ON(1)) {
       VLOG(1) << fmt::format(
@@ -292,7 +295,7 @@ void FileDataSource::configureEagerRemainingFilterColumns(
       fileConfig_->eagerRemainingFilterColumnsLoadRatio(sessionProperties);
   VELOX_USER_CHECK(
       loadRatio > 0.0 && loadRatio <= 1.0,
-      "{} must be in (0, 1]. Got {}",
+      "Eager remaining filter columns load ratio must be in (0, 1]: {}={}",
       FileConfig::kEagerRemainingFilterColumnsLoadRatioSession,
       loadRatio);
   for (const auto& name : remainingFilterColumns_) {

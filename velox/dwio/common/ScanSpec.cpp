@@ -22,16 +22,6 @@
 
 namespace facebook::velox::common {
 
-namespace {
-
-// Rows that must have been offered inside LazyVectors before the load ratio is
-// trusted. One default batch, so a single unrepresentative batch at the start
-// of a split cannot decide the column. Mirrors the numIn() guard that
-// compareTimeToDropValue applies before trusting filter selectivity.
-constexpr int64_t kMinLazyRowsOffered = 1024;
-
-} // namespace
-
 // static
 std::string_view ScanSpec::columnTypeString(ScanSpec::ColumnType columnType) {
   switch (columnType) {
@@ -162,7 +152,7 @@ void ScanSpec::updateEagerMaterialize() {
   // freezes at the value that triggered the switch.
   // TODO: To switch back, keep the column lazy every Nth read so the ratio is
   // re-measured.
-  const bool eager = lazyRowsLoaded_ >=
+  const bool eager = static_cast<double>(lazyRowsLoaded_) >=
       static_cast<double>(lazyRowsOffered_) * eagerLoadRatio_;
   if (eager && !eagerMaterialize_) {
     addThreadLocalRuntimeStat("eagerRemainingFilterColumns", RuntimeCounter(1));
