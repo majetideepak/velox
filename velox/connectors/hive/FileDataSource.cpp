@@ -286,7 +286,6 @@ FileDataSource::FileDataSource(
 void FileDataSource::configureEagerRemainingFilterColumns(
     const config::ConfigBase* sessionProperties) {
   if (!fileConfig_->eagerRemainingFilterColumns(sessionProperties)) {
-    LOG(INFO) << "Eager remaining filter columns: disabled";
     return;
   }
   const auto loadRatio =
@@ -301,11 +300,6 @@ void FileDataSource::configureEagerRemainingFilterColumns(
     // an info column, which are constant and never lazy anyway.
     if (auto* fieldSpec = scanSpec_->childByName(name)) {
       fieldSpec->setEagerMaterializeCandidate(true, loadRatio);
-      LOG(INFO) << "Eager remaining filter columns: marked " << name
-                << " loadRatio=" << loadRatio;
-    } else {
-      LOG(INFO) << "Eager remaining filter columns: no ScanSpec child for "
-                << name;
     }
   }
 }

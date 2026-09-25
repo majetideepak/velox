@@ -156,10 +156,6 @@ void ScanSpec::updateEagerMaterialize() {
       static_cast<double>(lazyRowsOffered_) * eagerLoadRatio_;
   if (eager && !eagerMaterialize_) {
     addThreadLocalRuntimeStat("eagerRemainingFilterColumns", RuntimeCounter(1));
-    LOG(INFO) << "Switching to eager: column=" << fieldName_
-              << " offered=" << lazyRowsOffered_
-              << " loaded=" << lazyRowsLoaded_
-              << " loadRatio=" << eagerLoadRatio_;
   }
   eagerMaterialize_ = eager;
 }
