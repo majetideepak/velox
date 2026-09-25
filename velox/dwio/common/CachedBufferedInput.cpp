@@ -603,10 +603,26 @@ void CachedBufferedInput::readRegions(
     for (auto i = startIndex; i < coalescedLoads_.size(); ++i) {
       auto& load = coalescedLoads_[i];
       if (load->state() == CoalescedLoad::State::kPlanned) {
-        executor_->add(
-            [pendingLoad = load, ssdSavable = options_.cacheable()]() {
-              pendingLoad->loadOrFuture(nullptr, ssdSavable);
-            });
+        // TEMPORARY: submission and execution-start of each async load, so the
+        // executor queueing delay can be measured. Remove.
+        const auto& loadRequests =
+            checkedPointerCast<DwioCoalescedLoadBase>(load.get())->requests();
+        const uint64_t firstOffset =
+            loadRequests.empty() ? 0 : loadRequests[0].key.offset;
+        LOG(INFO) << "SUBMITDBG file=" << fileNum_.id()
+                  << " offset=" << firstOffset
+                  << " numRequests=" << loadRequests.size()
+                  << " bytes=" << load->size();
+        executor_->add([pendingLoad = load,
+                        ssdSavable = options_.cacheable(),
+                        fileId = fileNum_.id(),
+                        firstOffset]() {
+          LOG(INFO) << "RUNDBG file=" << fileId << " offset=" << firstOffset
+                    << " phase=begin";
+          pendingLoad->loadOrFuture(nullptr, ssdSavable);
+          LOG(INFO) << "RUNDBG file=" << fileId << " offset=" << firstOffset
+                    << " phase=end";
+        });
       }
     }
     // Remove the loads that were complete. There can be done loads if the same

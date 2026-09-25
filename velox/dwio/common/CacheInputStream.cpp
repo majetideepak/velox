@@ -327,7 +327,11 @@ void CacheInputStream::loadPosition() {
   if (pin_.empty()) {
     VELOX_CHECK(!preloaded_, "Preloaded stream must always have a valid pin");
     auto load = bufferedInput_->coalescedLoad(this);
+    // TEMPORARY: -1 means the reader found no coalesced load at all. Remove.
+    int32_t loadState{-1};
+    uint64_t coalescedUs{0};
     if (load != nullptr) {
+      loadState = static_cast<int32_t>(load->state());
       folly::SemiFuture<bool> waitFuture(false);
       uint64_t loadUs{0};
       {
@@ -342,6 +346,7 @@ void CacheInputStream::loadPosition() {
           LOG(ERROR) << "IOERR: error in coalesced load " << e.what();
         }
       }
+      coalescedUs = loadUs;
       ioStats_->queryThreadIoLatencyUs().increment(loadUs);
       if (load->isSsdLoad()) {
         ioStats_->coalescedSsdLoadLatencyUs().increment(loadUs);
@@ -353,7 +358,21 @@ void CacheInputStream::loadPosition() {
     const auto nextLoadRegion = nextQuantizedLoadRegion(position_);
     // There is no need to update the metric in the loadData method because
     // loadSync is always executed regardless and updates the metric.
-    loadSync(nextLoadRegion);
+    uint64_t syncUs{0};
+    {
+      MicrosecondWallTimer timer(&syncUs);
+      loadSync(nextLoadRegion);
+    }
+    // TEMPORARY: one line per first touch of a load quantum by the reading
+    // thread. 'state' is CoalescedLoad::State: 0 kPlanned (this thread did the
+    // load itself), 1 kLoading (waited for another thread), 3 kLoaded (already
+    // there). Remove.
+    LOG(INFO) << "TOUCHDBG file=" << fileNum_
+              << " trackingId=" << trackingId_.id()
+              << " regionOffset=" << region_.offset
+              << " offset=" << nextLoadRegion.offset
+              << " size=" << nextLoadRegion.length << " state=" << loadState
+              << " coalescedUs=" << coalescedUs << " syncUs=" << syncUs;
   }
 
   auto* entry = pin_.checkedEntry();
