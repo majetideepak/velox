@@ -672,11 +672,6 @@ void SelectiveStructColumnReaderBase::getValues(
   }
 
   setComplexNulls(rows, *result);
-  // Columns handed out lazily in this batch. The operator stats report one lazy
-  // load time for the whole scan, so a scan that spends it on projected output
-  // columns looks like one that spends it on remaining filter columns; this
-  // names them.
-  std::vector<std::string_view> lazyColumns;
   for (const auto& childSpec : scanSpec_->children()) {
     if (!childSpec->keepValues()) {
       continue;
@@ -753,7 +748,6 @@ void SelectiveStructColumnReaderBase::getValues(
     // to skip the child: the conditions are equivalent, but read() bails out
     // early on an empty or fully filtered batch.
     childSpec->recordLazyOffered(rows.size());
-    lazyColumns.push_back(childSpec->fieldName());
     setOutputRowsForLazy(rows);
     // When the child has a transform (e.g., extraction pushdown), the lazy
     // vector type is the transform's output type, not the file column type.
@@ -763,18 +757,6 @@ void SelectiveStructColumnReaderBase::getValues(
         : resultRow->type()->childAt(channel);
     setLazyField(
         makeColumnLoader(index), lazyType, rows.size(), pool_, childResult);
-  }
-
-  if (!lazyColumns.empty()) {
-    std::string names;
-    for (const auto& name : lazyColumns) {
-      if (!names.empty()) {
-        names += ", ";
-      }
-      names += name;
-    }
-    LOG(INFO) << "Lazy columns of " << scanSpec_->fieldName() << " over "
-              << rows.size() << " rows: " << names;
   }
 
   resultRow->invalidateContainsLazyNotLoaded();
