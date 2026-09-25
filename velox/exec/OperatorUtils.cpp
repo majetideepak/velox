@@ -426,6 +426,11 @@ void loadColumns(const RowVectorPtr& input, core::ExecCtx& execCtx) {
   LocalSelectivityVector baseRowsHolder(&execCtx);
   LocalSelectivityVector rowsHolder(&execCtx);
   SelectivityVector* rows = nullptr;
+  // Start every column's IO before loading any of it, so that the round trips
+  // overlap instead of running one at a time on this thread.
+  for (auto& child : input->children()) {
+    LazyVector::startLoad(child);
+  }
   for (auto& child : input->children()) {
     if (isLazyNotLoaded(*child)) {
       if (!rows) {

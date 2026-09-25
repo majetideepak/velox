@@ -178,6 +178,19 @@ class ScanSpec {
     return projectOut_ || deltaUpdate_;
   }
 
+  /// True if a consumer of the scan reads this column for every batch the scan
+  /// emits, whatever the filters leave alive. The Hive connector sets it for
+  /// the remaining filter inputs it materializes whole, so that a reader can
+  /// start their IO alongside the filter columns' rather than after the scan
+  /// returns.
+  bool alwaysReadAfterScan() const {
+    return alwaysReadAfterScan_;
+  }
+
+  void setAlwaysReadAfterScan(bool value) {
+    alwaysReadAfterScan_ = value;
+  }
+
   /// Position in the RowVector returned by the top level scan. Applies
   /// only to children of the root struct where projectOut_ is true.
   column_index_t channel() const {
@@ -521,6 +534,7 @@ class ScanSpec {
 
   VectorPtr constantValue_;
   bool projectOut_{false};
+  bool alwaysReadAfterScan_{false};
 
   ColumnType columnType_{ColumnType::kRegular};
 

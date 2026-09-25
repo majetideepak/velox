@@ -212,6 +212,13 @@ class VectorLoader {
     return false;
   }
 
+  // Signals that load() is coming, so the loader can begin any IO it needs and
+  // return without waiting for it. Call this on a batch of loaders before
+  // load()ing the first, so that their IO overlaps. This is a hint only:
+  // implementations must stay correct whether or not it is called, and may be
+  // called more than once.
+  virtual void start() {}
+
  protected:
   friend class ChainedVectorLoader;
 
@@ -230,6 +237,10 @@ class ChainedVectorLoader : public VectorLoader {
       std::unique_ptr<VectorLoader> loader,
       PostVectorLoadProcessor postLoadProc)
       : loader_(std::move(loader)), postLoadProc_(std::move(postLoadProc)) {}
+
+  void start() override {
+    loader_->start();
+  }
 
  private:
   void loadInternal(
@@ -402,6 +413,15 @@ class LazyVector : public BaseVector {
       const SelectivityVector& rows,
       DecodedVector& decoded,
       SelectivityVector& baseRows);
+
+  // Starts the loads of every not-yet-loaded LazyVector inside 'vector' and
+  // returns without waiting for any of them. 'vector' may be an arbitrary
+  // wrapping of LazyVectors, including a row vector whose children are lazy,
+  // and this has no effect if there is nothing unloaded inside it. Takes no row
+  // set, since starting the IO does not depend on which rows are wanted. Call
+  // this before the first of a batch of loads that a caller is about to make,
+  // so that their IO overlaps instead of running one round trip at a time.
+  static void startLoad(const VectorPtr& vector);
 
   void validate(const VectorValidateOptions& options) const override;
 

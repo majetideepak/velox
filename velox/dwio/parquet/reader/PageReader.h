@@ -97,6 +97,13 @@ class PageReader {
         stats_(stats),
         sessionTimezone_(sessionTimezone) {}
 
+  /// Starts the load of the column chunk this reads and returns without
+  /// waiting for it. Called before a batch of columns is read so that their IO
+  /// overlaps.
+  void startLoad() {
+    inputStream_->startLoad();
+  }
+
   /// Advances 'numRows' top level rows.
   void skip(int64_t numRows);
 

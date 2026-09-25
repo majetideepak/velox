@@ -170,6 +170,17 @@ size_t CacheInputStream::positionSize() const {
   return 1;
 }
 
+void CacheInputStream::startLoad() {
+  // A non-empty pin means the bytes for the current position are already here,
+  // so there is nothing to start. This is what keeps the callers cheap after
+  // the first batch of a row group: loadSync() leaves the pin behind, so
+  // subsequent batches do not even take the lock in CachedBufferedInput.
+  if (!pin_.empty() || preloaded_ || bufferedInput_ == nullptr) {
+    return;
+  }
+  bufferedInput_->startLoad(this);
+}
+
 void CacheInputStream::setRemainingBytes(uint64_t remainingBytes) {
   VELOX_CHECK_GE(region_.length, position_ + remainingBytes);
   window_ = Region{static_cast<uint64_t>(position_), remainingBytes};

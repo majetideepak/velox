@@ -55,6 +55,7 @@ class CacheInputStream : public SeekableInputStream {
   void seekToPosition(PositionProvider& position) override;
   std::string getName() const override;
   size_t positionSize() const override;
+  void startLoad() override;
 
   /// Returns a copy of 'this', ranging over the same bytes. The clone is
   /// initially positioned at the position of 'this' and can be moved

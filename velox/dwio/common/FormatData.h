@@ -40,6 +40,13 @@ class FormatData {
   /// The default is a no-op; formats that defer stream loading override it.
   virtual void loadLazyInputStreams() {}
 
+  /// Starts the load of the input streams for this column and returns without
+  /// waiting for it. Called before a batch of columns is read so that their IO
+  /// overlaps instead of running one round trip at a time on the reading
+  /// thread. The default is a no-op; formats that read through the async data
+  /// cache override it. Callers must stay correct if it is never called.
+  virtual void startLoad() {}
+
   /// Reads nulls if the format has nulls separate from the encoded
   /// data. If there are no nulls, 'nulls' is set to nullptr, else to
   /// a suitable sized and padded Buffer. 'incomingNulls' may be given

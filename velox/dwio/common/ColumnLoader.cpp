@@ -88,7 +88,28 @@ void scatter(RowSet rows, vector_size_t resultSize, VectorPtr* result) {
   *result = BaseVector::wrapInDictionary(nullptr, indices, resultSize, *result);
 }
 
+// Starts the IO for a lazy field without reading it. Returns without doing
+// anything once the enclosing reader has moved on, since the streams then hold
+// a different row group than the one this loader was made for. loadInternal()
+// fails outright in that case; start() is a hint, so it stays silent.
+void startFieldLoad(
+    const SelectiveStructColumnReaderBase* structReader,
+    SelectiveColumnReader* fieldReader,
+    uint64_t version) {
+  if (version == structReader->numReads()) {
+    fieldReader->startLoad();
+  }
+}
+
 } // namespace
+
+void ColumnLoader::start() {
+  startFieldLoad(structReader_, fieldReader_, version_);
+}
+
+void DeltaUpdateColumnLoader::start() {
+  startFieldLoad(structReader_, fieldReader_, version_);
+}
 
 void ColumnLoader::loadInternal(
     RowSet rows,

@@ -691,7 +691,12 @@ void HashProbe::spillInput(RowVectorPtr& input) {
     return;
   }
 
-  // Ensure vector are lazy loaded before spilling.
+  // Ensure vector are lazy loaded before spilling. Start every column's IO
+  // before loading any of it, so that the round trips overlap instead of
+  // running one at a time on this thread.
+  for (int32_t i = 0; i < input->childrenSize(); ++i) {
+    LazyVector::startLoad(input->childAt(i));
+  }
   for (int32_t i = 0; i < input->childrenSize(); ++i) {
     input->childAt(i)->loadedVector();
   }

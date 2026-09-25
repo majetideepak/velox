@@ -38,6 +38,8 @@ class ColumnLoader : public VectorLoader {
     return true;
   }
 
+  void start() override;
+
  protected:
   void loadInternal(
       RowSet rows,
@@ -90,6 +92,8 @@ class DeltaUpdateColumnLoader : public VectorLoader {
       : structReader_(structReader),
         fieldReader_(fieldReader),
         version_(version) {}
+
+  void start() override;
 
  private:
   void loadInternal(

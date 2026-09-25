@@ -155,6 +155,20 @@ class SelectiveStructColumnReaderBase : public SelectiveColumnReader {
         isChildMissing(childSpec);
   }
 
+  // Returns true if read() reads 'childSpec' from the file rather than skipping
+  // it or deferring it to a LazyVector. startChildLoads() and read()'s child
+  // loop must agree on this: starting a load for a column read() does not
+  // consume fetches bytes nobody asked for.
+  bool readsChildFromFile(const velox::common::ScanSpec& childSpec) const;
+
+  // Starts the loads for the children whose read is certain when
+  // 'certainlyRead' is true, and for the rest when it is false, so that a phase
+  // of IO overlaps instead of running one round trip at a time on this thread.
+  // Certain means the child carries a filter or
+  // ScanSpec::alwaysReadAfterScan(). Starts IO only — it does not reproduce
+  // read()'s constant-filter side effect or either of its early exits.
+  void startChildLoads(bool certainlyRead);
+
   /// Records the number of nulls added by 'this' between the end position of
   /// each child reader and the end of the range of 'read(). This must be done
   /// also if a child is not read so that we know how much to skip when seeking
