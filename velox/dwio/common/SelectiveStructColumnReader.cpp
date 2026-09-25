@@ -403,11 +403,24 @@ bool SelectiveStructColumnReaderBase::readsChildFromFile(
       !childSpec.hasFilter() && generateLazyChildren_);
 }
 
-void SelectiveStructColumnReaderBase::startChildLoads(bool hasFilter) {
+void SelectiveStructColumnReaderBase::startChildLoads(bool certainlyRead) {
   for (const auto& childSpec : scanSpec_->children()) {
-    if (childSpec->hasFilter() == hasFilter && readsChildFromFile(*childSpec)) {
-      children_.at(childSpec->subscript())->startLoad();
+    const bool childCertainlyRead =
+        childSpec->hasFilter() || childSpec->alwaysReadAfterScan();
+    if (childCertainlyRead != certainlyRead) {
+      continue;
     }
+    if (isChildConstant(*childSpec) || !childSpec->readFromFile()) {
+      // No stream to start, and no reader at 'subscript()' either.
+      continue;
+    }
+    // A column a post-scan filter always reads is loaded through its
+    // LazyVector, so read() skips it and readsChildFromFile() is false for it.
+    // It is started all the same, because something always goes on to load it.
+    if (!childCertainlyRead && !readsChildFromFile(*childSpec)) {
+      continue;
+    }
+    children_.at(childSpec->subscript())->startLoad();
   }
 }
 
@@ -498,21 +511,23 @@ void SelectiveStructColumnReaderBase::read(
   if (columnReaderOptions_.columnMappingMode_ != ColumnMappingMode::kName) {
     VELOX_CHECK(!childSpecs.empty());
   }
-  // Start the filter children's IO before decoding any of it. Without this the
-  // loop below blocks on child 0's round trip before child 1's has been issued,
-  // so K columns cost K round trips in sequence. This runs before the loop's
-  // advanceFieldReader() calls, so it starts the load for the position the
-  // reader is at now; the formats whose stream position depends on
+  // Start the IO for the children whose read is certain before decoding any of
+  // it. Without this the loop below blocks on child 0's round trip before child
+  // 1's has been issued, so K columns cost K round trips in sequence. This runs
+  // before the loop's advanceFieldReader() calls, so it starts the load for the
+  // position the reader is at now; the formats whose stream position depends on
   // advanceFieldReader() do not override FormatData::startLoad().
   const bool startLoadsTogether =
       columnReaderOptions_.startColumnLoadsTogether_;
   if (startLoadsTogether) {
-    startChildLoads(/*hasFilter=*/true);
+    startChildLoads(/*certainlyRead=*/true);
   }
-  // The children that only get projected out are started later, once the
-  // filters have run. 'childSpecs' has the filter children first, so the first
-  // child without a filter is the point where that becomes known.
-  bool startedProjectedLoads = false;
+  // The children whose read is contingent on the filters wait for the point
+  // where the filters are known to have left rows. 'childSpecs' holds the
+  // filter children first, so that point is the first child without a filter.
+  // Fetching a contingent child any earlier fetches it for a batch the filters
+  // may go on to discard.
+  bool startedProjectedLoads = !startLoadsTogether;
   for (size_t i = 0; i < childSpecs.size(); ++i) {
     const auto& childSpec = childSpecs[i];
 
@@ -542,13 +557,12 @@ void SelectiveStructColumnReaderBase::read(
       continue;
     }
 
-    if (startLoadsTogether && !startedProjectedLoads &&
-        !childSpec->hasFilter()) {
+    if (!startedProjectedLoads && !childSpec->hasFilter()) {
       // Reaching a child without a filter means every filter child has run and
       // left rows alive, and every constant child so far has passed its filter.
       // The batch is therefore known to be read, so fetching the columns it
       // only projects out is not speculative.
-      startChildLoads(/*hasFilter=*/false);
+      startChildLoads(/*certainlyRead=*/false);
       startedProjectedLoads = true;
     }
 

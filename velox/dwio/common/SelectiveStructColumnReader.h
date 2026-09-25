@@ -161,14 +161,13 @@ class SelectiveStructColumnReaderBase : public SelectiveColumnReader {
   // consume fetches bytes nobody asked for.
   bool readsChildFromFile(const velox::common::ScanSpec& childSpec) const;
 
-  // Starts the loads for the children read() is about to read whose
-  // ScanSpec::hasFilter() equals 'hasFilter', so that their IO overlaps instead
-  // of one round trip at a time on this thread. read() calls this twice,
-  // because fetching a projected-out column before the filters have run would
-  // fetch it for a batch the filters go on to discard. Starts IO only — it does
-  // not reproduce read()'s constant-filter side effect or either of its early
-  // exits.
-  void startChildLoads(bool hasFilter);
+  // Starts the loads for the children whose read is certain when
+  // 'certainlyRead' is true, and for the rest when it is false, so that a phase
+  // of IO overlaps instead of running one round trip at a time on this thread.
+  // Certain means the child carries a filter or
+  // ScanSpec::alwaysReadAfterScan(). Starts IO only — it does not reproduce
+  // read()'s constant-filter side effect or either of its early exits.
+  void startChildLoads(bool certainlyRead);
 
   /// Records the number of nulls added by 'this' between the end position of
   /// each child reader and the end of the range of 'read(). This must be done

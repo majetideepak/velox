@@ -277,6 +277,19 @@ FileDataSource::FileDataSource(
     configureExtractionColumns();
   }
 
+  // evaluateRemainingFilter() loads these columns whole for every batch the
+  // reader emits, so the reader can start their IO alongside the columns
+  // carrying a pushed-down filter instead of waiting for the batch. The
+  // remaining filter reads its other inputs only for the rows an earlier
+  // conjunct leaves, so those stay behind the pushed-down filters. Set after
+  // the extraction rebuild above, which replaces 'scanSpec_'.
+  for (const auto fieldIndex : multiReferencedFields_) {
+    auto* childSpec =
+        scanSpec_->childByName(readerOutputType_->nameOf(fieldIndex));
+    VELOX_CHECK_NOT_NULL(childSpec);
+    childSpec->setAlwaysReadAfterScan(true);
+  }
+
   dataIoStats_ = std::make_shared<io::IoStatistics>();
   metadataIoStats_ = std::make_shared<io::IoStatistics>();
   ioStats_ = std::make_shared<IoStats>();
