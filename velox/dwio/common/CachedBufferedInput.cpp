@@ -242,6 +242,21 @@ void CachedBufferedInput::load(const LogType /*unused*/) {
     const int loadIndex =
         (prefetchAnyway || isPrefetchPct(adjustedReadPct(trackingData))) ? 1
                                                                          : 0;
+    // TEMPORARY: one line per enqueued region per load unit. Remove.
+    LOG(INFO) << "PREFETCHDBG file=" << fileNum_.id()
+              << " trackingId=" << request.trackingId.id()
+              << " emptyId=" << request.trackingId.empty()
+              << " prefetchAnyway=" << prefetchAnyway
+              << " hasTracker=" << (tracker_ != nullptr)
+              << " size=" << request.size << " offset=" << request.key.offset
+              << " read=" << static_cast<int64_t>(trackingData.readBytes)
+              << " referenced="
+              << static_cast<int64_t>(trackingData.referencedBytes)
+              << " lastReferenced="
+              << static_cast<int64_t>(trackingData.lastReferencedBytes)
+              << " pct=" << adjustedReadPct(trackingData)
+              << " minPct=" << FLAGS_cache_prefetch_min_pct
+              << " loadIndex=" << loadIndex;
     auto parts = makeRequestParts(
         request, trackingData, options_.loadQuantum(), extraRequests);
     for (auto part : parts) {
@@ -528,6 +543,13 @@ class SsdLoad : public DwioCoalescedLoadBase {
 void CachedBufferedInput::readRegion(
     const std::vector<CacheRequest*>& requests,
     bool prefetch) {
+  // TEMPORARY: one line per candidate group. Remove.
+  LOG(INFO) << "REGIONDBG file=" << fileNum_.id()
+            << " numRequests=" << requests.size() << " prefetch=" << prefetch
+            << " trackingId="
+            << (requests.empty() ? -1 : requests[0]->trackingId.id())
+            << " dropped="
+            << (requests.empty() || (requests.size() == 1 && !prefetch));
   if (requests.empty() || (requests.size() == 1 && !prefetch)) {
     return;
   }
