@@ -868,6 +868,10 @@ Common Options
      - integer
      - 8MB
      - Define the size of each coalesce load request. E.g. in Parquet scan, if it's bigger than rowgroup size then the whole row group can be fetched together. Otherwise, the row group will be fetched column chunk by column chunk. Session: ``load-quantum``.
+   * - ``prefetch-pct``
+     - integer
+     - 200
+     - Percentage of a load quantum a cached stream must have returned to its reader before the next quantum of the same stream is scheduled for read-ahead on the IO executor. A value over 100 disables read-ahead. A lower value starts the read-ahead earlier, which hides more of its latency but wastes the read when the reader stops before reaching the next quantum. Only applies when the async data cache is enabled. Session: ``prefetch-pct``.
    * - ``num_cached_file_handles``
      - integer
      - 20000

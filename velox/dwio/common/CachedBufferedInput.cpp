@@ -63,6 +63,7 @@ std::unique_ptr<SeekableInputStream> CachedBufferedInput::enqueue(
       id,
       groupId_.id(),
       options_.loadQuantum());
+  stream->setPrefetchPct(options_.prefetchPct());
   if (preloaded()) {
     // Data is already in cache. Give the stream its own pin copy so it can
     // outlive this CachedBufferedInput and skip all loading/prefetch logic.
@@ -649,6 +650,7 @@ std::unique_ptr<SeekableInputStream> CachedBufferedInput::read(
       TrackingId(),
       0,
       options_.loadQuantum());
+  stream->setPrefetchPct(options_.prefetchPct());
   if (preloaded()) {
     stream->setPreloadedPin(preloadPin_);
   }
@@ -660,8 +662,14 @@ bool CachedBufferedInput::prefetch(Region region) {
   if (!shouldPreload(numPages)) {
     return false;
   }
+  // load() consumes all of 'requests_'. A read-ahead fires while a stream is
+  // being consumed, so requests already enqueued for a later stripe or row
+  // group would be dragged into this load and issued early. Keep them out and
+  // put them back.
+  auto pending = std::move(requests_);
   auto stream = enqueue(region, nullptr);
   load(LogType::FILE);
+  requests_ = std::move(pending);
   // Remove the coalesced load made for the stream. It will not be accessed. The
   // cache entry will be accessed.
   coalescedLoad(stream.get());

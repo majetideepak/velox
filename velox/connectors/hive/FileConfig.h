@@ -192,6 +192,20 @@ class FileConfig {
   static constexpr const char* kLoadQuantum = "load-quantum";
 
   VELOX_HIVE_CONFIG(
+      kPrefetchPctSession,
+      prefetchPct,
+      "prefetch-pct",
+      int32_t,
+      200,
+      "Percentage of a load quantum a cached stream must have returned to its "
+      "reader before the next quantum of the same stream is scheduled for "
+      "read-ahead on the IO executor. A value over 100 disables read-ahead. "
+      "A lower value starts the read-ahead earlier, which hides more of its "
+      "latency but wastes the read when the reader stops before the next "
+      "quantum.")
+  static constexpr const char* kPrefetchPct = "prefetch-pct";
+
+  VELOX_HIVE_CONFIG(
       kReadStatsBasedFilterReorderDisabledSession,
       readStatsBasedFilterReorderDisabled,
       "stats_based_filter_reorder_disabled",
