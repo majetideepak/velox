@@ -403,9 +403,9 @@ bool SelectiveStructColumnReaderBase::readsChildFromFile(
       !childSpec.hasFilter() && generateLazyChildren_);
 }
 
-void SelectiveStructColumnReaderBase::startChildLoads() {
+void SelectiveStructColumnReaderBase::startChildLoads(bool hasFilter) {
   for (const auto& childSpec : scanSpec_->children()) {
-    if (readsChildFromFile(*childSpec)) {
+    if (childSpec->hasFilter() == hasFilter && readsChildFromFile(*childSpec)) {
       children_.at(childSpec->subscript())->startLoad();
     }
   }
@@ -498,15 +498,21 @@ void SelectiveStructColumnReaderBase::read(
   if (columnReaderOptions_.columnMappingMode_ != ColumnMappingMode::kName) {
     VELOX_CHECK(!childSpecs.empty());
   }
-  // Start every child's IO before decoding any of it. Without this the loop
-  // below blocks on child 0's round trip before child 1's has been issued, so K
-  // columns cost K round trips in sequence. This runs before the loop's
+  // Start the filter children's IO before decoding any of it. Without this the
+  // loop below blocks on child 0's round trip before child 1's has been issued,
+  // so K columns cost K round trips in sequence. This runs before the loop's
   // advanceFieldReader() calls, so it starts the load for the position the
   // reader is at now; the formats whose stream position depends on
   // advanceFieldReader() do not override FormatData::startLoad().
-  if (columnReaderOptions_.startColumnLoadsTogether_) {
-    startChildLoads();
+  const bool startLoadsTogether =
+      columnReaderOptions_.startColumnLoadsTogether_;
+  if (startLoadsTogether) {
+    startChildLoads(/*hasFilter=*/true);
   }
+  // The children that only get projected out are started later, once the
+  // filters have run. 'childSpecs' has the filter children first, so the first
+  // child without a filter is the point where that becomes known.
+  bool startedProjectedLoads = false;
   for (size_t i = 0; i < childSpecs.size(); ++i) {
     const auto& childSpec = childSpecs[i];
 
@@ -534,6 +540,16 @@ void SelectiveStructColumnReaderBase::read(
         !childSpec->hasFilter() && generateLazyChildren_) {
       // Will make a LazyVector (with or without transform).
       continue;
+    }
+
+    if (startLoadsTogether && !startedProjectedLoads &&
+        !childSpec->hasFilter()) {
+      // Reaching a child without a filter means every filter child has run and
+      // left rows alive, and every constant child so far has passed its filter.
+      // The batch is therefore known to be read, so fetching the columns it
+      // only projects out is not speculative.
+      startChildLoads(/*hasFilter=*/false);
+      startedProjectedLoads = true;
     }
 
     advanceFieldReader(reader, offset);
