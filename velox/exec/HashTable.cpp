@@ -24,6 +24,7 @@
 #include "velox/common/testutil/TestValue.h"
 #include "velox/exec/AdaptivePrefetch.h"
 #include "velox/exec/OperatorUtils.h"
+#include "velox/vector/LazyVector.h"
 
 using facebook::velox::common::testutil::TestValue;
 
@@ -2638,6 +2639,13 @@ void HashTable<ignoreNullKeys>::prepareForGroupProbe(
   checkHashBitsOverlap(spillInputStartPartitionBit);
   auto& hashers = lookup.hashers;
 
+  // Start every key's IO before decoding any of it, so that the round trips
+  // overlap instead of running one at a time on this thread. A grouping key
+  // straight off a table scan is a lazy column, and every key here is about to
+  // be read, so this adds no bytes.
+  for (auto& hasher : hashers) {
+    LazyVector::startLoad(input->childAt(hasher->channel()));
+  }
   for (auto& hasher : hashers) {
     auto key = input->childAt(hasher->channel())->loadedVector();
     hasher->decode(*key, rows);
@@ -2685,6 +2693,10 @@ void HashTable<ignoreNullKeys>::prepareForJoinProbe(
   auto& hashers = lookup.hashers;
 
   if (decodeAndRemoveNulls) {
+    // Overlap the keys' IO, as in prepareForGroupProbe() above.
+    for (auto& hasher : hashers) {
+      LazyVector::startLoad(input->childAt(hasher->channel()));
+    }
     for (auto& hasher : hashers) {
       auto key = input->childAt(hasher->channel())->loadedVector();
       hasher->decode(*key, rows);

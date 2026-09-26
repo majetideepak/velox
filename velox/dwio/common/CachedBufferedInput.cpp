@@ -679,9 +679,27 @@ void CachedBufferedInput::startLoad(const SeekableInputStream* stream) {
   // group, so the group is submitted once however many of its streams ask. The
   // streams that no longer find it fall back to loadSync(), which waits on the
   // entry this load is filling rather than fetching it again.
-  auto load = coalescedLoad(stream);
-  if (load == nullptr ||
-      load->state() != cache::CoalescedLoad::State::kPlanned) {
+  //
+  // A load that is past kPlanned stays in the map. Some other path already
+  // started it, and the read that follows must still find it there so that it
+  // waits on this load's future. Taking it out and dropping it would send that
+  // read down loadSync() for bytes that are already on their way.
+  auto load = streamToCoalescedLoad_.withWLock(
+      [&](auto& loads) -> std::shared_ptr<cache::CoalescedLoad> {
+        auto it = loads.find(stream);
+        if (it == loads.end() ||
+            it->second->state() != cache::CoalescedLoad::State::kPlanned) {
+          return nullptr;
+        }
+        auto planned = std::move(it->second);
+        auto* dwioLoad =
+            checkedPointerCast<DwioCoalescedLoadBase>(planned.get());
+        for (auto& request : dwioLoad->requests()) {
+          loads.erase(request.stream);
+        }
+        return planned;
+      });
+  if (load == nullptr) {
     return;
   }
   submitLoadAndLog(
