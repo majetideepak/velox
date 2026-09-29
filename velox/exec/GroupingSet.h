@@ -235,6 +235,19 @@ class GroupingSet {
 
   void populateTempVectors(int32_t aggregateIndex, const RowVectorPtr& input);
 
+  // Starts the IO for the grouping keys and the mask columns without waiting
+  // for any of them. prepareForGroupProbe() decodes every key and
+  // masks_.addInput() decodes every mask, so this adds no bytes; without it
+  // each one's round trip runs on its own, K columns costing K round trips in
+  // sequence on the thread that should be decoding.
+  void startKeyAndMaskLoads(const RowVectorPtr& input);
+
+  // Starts the IO for the inputs of every aggregate that goes on to read them,
+  // without waiting. Must run after masks_.addInput(), which is what decides
+  // which aggregates read anything at all; starting an aggregate whose mask
+  // leaves no rows would fetch bytes nothing consumes.
+  void startAggregateInputLoads(const RowVectorPtr& input);
+
   // If the given aggregation has mask, the method returns reference to the
   // selectivity vector from the maskedActiveRows_ (based on the mask channel
   // index for this aggregation), otherwise it returns reference to activeRows_.

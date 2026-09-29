@@ -178,7 +178,11 @@ void CacheInputStream::startLoad() {
   if (!pin_.empty() || preloaded_ || bufferedInput_ == nullptr) {
     return;
   }
-  bufferedInput_->startLoad(this);
+  const bool submitted = bufferedInput_->startLoad(this);
+  // TODO: Remove once the IO overlap work is measured and settled.
+  LOG(INFO) << "STARTDBG file=" << fileNum_ << " trk=" << trackingId_.id()
+            << " off=" << region_.offset << " len=" << region_.length
+            << " pos=" << position_ << " submitted=" << (submitted ? 1 : 0);
 }
 
 void CacheInputStream::setRemainingBytes(uint64_t remainingBytes) {
@@ -338,9 +342,13 @@ void CacheInputStream::loadPosition() {
   if (pin_.empty()) {
     VELOX_CHECK(!preloaded_, "Preloaded stream must always have a valid pin");
     auto load = bufferedInput_->coalescedLoad(this);
+    // -1 distinguishes "no load in the map at all" from a load that exists in
+    // one of CoalescedLoad::State's values.
+    const int32_t loadState =
+        load == nullptr ? -1 : static_cast<int32_t>(load->state());
+    uint64_t loadUs{0};
     if (load != nullptr) {
       folly::SemiFuture<bool> waitFuture(false);
-      uint64_t loadUs{0};
       {
         MicrosecondWallTimer timer(&loadUs);
         try {
@@ -364,7 +372,18 @@ void CacheInputStream::loadPosition() {
     const auto nextLoadRegion = nextQuantizedLoadRegion(position_);
     // There is no need to update the metric in the loadData method because
     // loadSync is always executed regardless and updates the metric.
-    loadSync(nextLoadRegion);
+    uint64_t syncUs{0};
+    {
+      MicrosecondWallTimer timer(&syncUs);
+      loadSync(nextLoadRegion);
+    }
+    // TODO: Remove once the IO overlap work is measured and settled. 'state'
+    // says whether the touch found a load planned (0), running (1), done (3)
+    // or absent (-1); 'syncUs' is what the reading thread paid for it.
+    LOG(INFO) << "TOUCHDBG file=" << fileNum_ << " trk=" << trackingId_.id()
+              << " off=" << region_.offset << " len=" << region_.length
+              << " pos=" << position_ << " state=" << loadState
+              << " loadUs=" << loadUs << " syncUs=" << syncUs;
   }
 
   auto* entry = pin_.checkedEntry();

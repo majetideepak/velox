@@ -18,6 +18,7 @@
 #include "velox/common/testutil/TestValue.h"
 #include "velox/exec/OperatorUtils.h"
 #include "velox/exec/Task.h"
+#include "velox/vector/LazyVector.h"
 
 using facebook::velox::common::testutil::TestValue;
 
@@ -297,6 +298,8 @@ void GroupingSet::addInputForActiveRows(
   TestValue::adjust(
       "facebook::velox::exec::GroupingSet::addInputForActiveRows", this);
 
+  startKeyAndMaskLoads(input);
+
   table_->prepareForGroupProbe(
       *lookup_,
       input,
@@ -310,6 +313,11 @@ void GroupingSet::addInputForActiveRows(
 
   table_->groupProbe(*lookup_, BaseHashTable::kNoSpillInputStartPartitionBit);
   masks_.addInput(input, activeRows_);
+
+  // Separate from the loop below on purpose. Merging them would block on the
+  // first aggregate's round trip before the second aggregate's had been
+  // issued, which is the serialization this is here to remove.
+  startAggregateInputLoads(input);
 
   auto* groups = lookup_->hits.data();
   const auto& newGroups = lookup_->newGroups;
@@ -629,7 +637,9 @@ void GroupingSet::addGlobalAggregationInput(
   activeRows_.resize(numRows);
   activeRows_.setAll();
 
+  startKeyAndMaskLoads(input);
   masks_.addInput(input, activeRows_);
+  startAggregateInputLoads(input);
 
   auto* group = lookup_->hits[0];
 
@@ -776,6 +786,65 @@ void GroupingSet::destroyGlobalAggregations() {
       function->destroy(folly::Range(groups, 1));
     }
   }
+}
+
+void GroupingSet::startKeyAndMaskLoads(const RowVectorPtr& input) {
+  int32_t numStarted{0};
+  int32_t numChannels{0};
+  for (auto channel : keyChannels_) {
+    if (channel == kConstantChannel) {
+      continue;
+    }
+    const auto& child = input->childAt(channel);
+    ++numChannels;
+    numStarted += isLazyNotLoaded(*child) ? 1 : 0;
+    LazyVector::startLoad(child);
+  }
+  for (const auto& aggregate : aggregates_) {
+    if (!aggregate.mask.has_value()) {
+      continue;
+    }
+    const auto& child = input->childAt(aggregate.mask.value());
+    ++numChannels;
+    numStarted += isLazyNotLoaded(*child) ? 1 : 0;
+    LazyVector::startLoad(child);
+  }
+  LOG(INFO) << "AGGDBG phase=keys channels=" << numChannels
+            << " started=" << numStarted;
+}
+
+void GroupingSet::startAggregateInputLoads(const RowVectorPtr& input) {
+  int32_t numStarted{0};
+  int32_t numChannels{0};
+  for (auto i = 0; i < aggregates_.size(); ++i) {
+    const auto& aggregate = aggregates_[i];
+    if (!aggregate.sortingKeys.empty()) {
+      // Fed by sortedAggregations_, for activeRows_ rather than for this
+      // aggregate's own mask. Nothing reads it when that is absent.
+      if (sortedAggregations_ == nullptr) {
+        continue;
+      }
+    } else if (!getSelectivityVector(i).hasSelections()) {
+      continue;
+    }
+    for (auto channel : aggregate.inputs) {
+      if (channel == kConstantChannel) {
+        continue;
+      }
+      const auto& child = input->childAt(channel);
+      ++numChannels;
+      numStarted += isLazyNotLoaded(*child) ? 1 : 0;
+      LazyVector::startLoad(child);
+    }
+    for (auto channel : aggregate.sortingKeys) {
+      const auto& child = input->childAt(channel);
+      ++numChannels;
+      numStarted += isLazyNotLoaded(*child) ? 1 : 0;
+      LazyVector::startLoad(child);
+    }
+  }
+  LOG(INFO) << "AGGDBG phase=aggs channels=" << numChannels
+            << " started=" << numStarted;
 }
 
 void GroupingSet::populateTempVectors(

@@ -145,6 +145,14 @@ std::vector<CacheRequest*> makeRequestParts(
             request.trackingId));
     parts.push_back(extraRequests.back().get());
     parts.back()->coalesces = prefetch;
+    // Only the part covering the start of the region carries the stream, so
+    // that 'streamToCoalescedLoad_' maps the stream to the load for the first
+    // quantum. That is the one the reader wants when it first touches the
+    // stream; the later quanta are reached through loadSync() and the read
+    // ahead in CacheInputStream::Next(). Leaving the field unset here would
+    // key every one of these loads on an indeterminate pointer, so neither
+    // startLoad() nor loadPosition() would ever find them.
+    parts.back()->stream = offset == 0 ? request.stream : nullptr;
     if (prefetchOne) {
       break;
     }
@@ -547,7 +555,9 @@ void CachedBufferedInput::readRegion(
   coalescedLoads_.push_back(load);
   streamToCoalescedLoad_.withWLock([&](auto& loads) {
     for (auto& request : requests) {
-      loads[request->stream] = load;
+      if (request->stream != nullptr) {
+        loads[request->stream] = load;
+      }
     }
   });
 }
@@ -621,23 +631,44 @@ std::shared_ptr<cache::CoalescedLoad> CachedBufferedInput::coalescedLoad(
       });
 }
 
-void CachedBufferedInput::startLoad(const SeekableInputStream* stream) {
+bool CachedBufferedInput::startLoad(const SeekableInputStream* stream) {
   if (executor_ == nullptr) {
-    return;
+    return false;
   }
   // Takes the load out of 'streamToCoalescedLoad_' for all the streams of the
   // group, so the group is submitted once however many of its streams ask. The
   // streams that no longer find it fall back to loadSync(), which waits on the
   // entry this load is filling rather than fetching it again.
-  auto load = coalescedLoad(stream);
-  if (load == nullptr ||
-      load->state() != cache::CoalescedLoad::State::kPlanned) {
-    return;
+  //
+  // A load that is past kPlanned stays in the map. Some other path already
+  // started it, and the read that follows must still find it there so that it
+  // waits on this load's future. Taking it out and dropping it would send that
+  // read down loadSync() for bytes that are already on their way.
+  auto load = streamToCoalescedLoad_.withWLock(
+      [&](auto& loads) -> std::shared_ptr<cache::CoalescedLoad> {
+        auto it = loads.find(stream);
+        if (it == loads.end() ||
+            it->second->state() != cache::CoalescedLoad::State::kPlanned) {
+          return nullptr;
+        }
+        auto planned = std::move(it->second);
+        auto* dwioLoad =
+            checkedPointerCast<DwioCoalescedLoadBase>(planned.get());
+        for (auto& request : dwioLoad->requests()) {
+          if (request.stream != nullptr) {
+            loads.erase(request.stream);
+          }
+        }
+        return planned;
+      });
+  if (load == nullptr) {
+    return false;
   }
   executor_->add(
       [pendingLoad = std::move(load), ssdSavable = options_.cacheable()]() {
         pendingLoad->loadOrFuture(nullptr, ssdSavable);
       });
+  return true;
 }
 
 void CachedBufferedInput::reset() {
