@@ -108,6 +108,7 @@ void configureReaderOptions(
   readerOptions.setLoadQuantum(fileConfig->loadQuantum(sessionProperties));
   readerOptions.setStartColumnLoadsTogether(
       fileConfig->startColumnLoadsTogether(sessionProperties));
+  readerOptions.setPrefetchPct(fileConfig->prefetchPct(sessionProperties));
   readerOptions.setDirectBufferedInputSharedAllocation(
       fileConfig->directBufferedInputSharedAllocation(sessionProperties));
   readerOptions.setMaxCoalesceBytes(

@@ -877,6 +877,15 @@ Common Options
        instead of running one round trip at a time on the reading thread. Reads no extra bytes, since the set of
        columns whose loads start is exactly the set the read consumes. Has an effect only with the async data cache
        and an IO executor. Session: ``start_column_loads_together``.
+   * - ``prefetch-pct``
+     - integer
+     - 50
+     - Percentage of a load quantum a cached stream must have returned to its reader before the next quantum of the
+       same stream is scheduled for read-ahead on the IO executor. A value over 100 disables read-ahead. A lower value
+       starts the read-ahead earlier, which hides more of its latency but wastes the read when the reader stops before
+       reaching the next quantum. This is the only mechanism that covers the second and later quanta of a column chunk
+       larger than ``load-quantum``, so it matters most for large Parquet row groups. Only applies when the async data
+       cache is enabled. Session: ``prefetch-pct``.
    * - ``num_cached_file_handles``
      - integer
      - 20000

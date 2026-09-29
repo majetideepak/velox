@@ -184,7 +184,9 @@ class CacheInputStream : public SeekableInputStream {
   std::optional<velox::common::Region> window_;
 
   // Percentage of 'loadQuantum_' at which the next load quantum gets scheduled.
-  // Over 100 means no prefetch.
+  // Over 100 means no prefetch. Both CachedBufferedInput stream factories pass
+  // ReaderOptions::prefetchPct() here, so this default only applies to a stream
+  // nobody configured.
   int32_t prefetchPct_{200};
 
   // True if this stream serves data from a preloaded whole-file cache entry.

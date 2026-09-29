@@ -203,6 +203,23 @@ class FileConfig {
       "start-column-loads-together";
 
   VELOX_HIVE_CONFIG(
+      kPrefetchPctSession,
+      prefetchPct,
+      "prefetch-pct",
+      int32_t,
+      50,
+      "Percentage of a load quantum a cached stream must have returned to its "
+      "reader before the next quantum of the same stream is scheduled for "
+      "read-ahead on the IO executor. A value over 100 disables read-ahead. "
+      "A lower value starts the read-ahead earlier, which hides more of its "
+      "latency but wastes the read when the reader stops before the next "
+      "quantum. This is the only mechanism that covers the second and later "
+      "quanta of a column chunk larger than the load quantum: those carry no "
+      "stream in 'streamToCoalescedLoad_', so startLoad() cannot reach them "
+      "and the reading thread would otherwise fetch each one synchronously.")
+  static constexpr const char* kPrefetchPct = "prefetch-pct";
+
+  VELOX_HIVE_CONFIG(
       kReadStatsBasedFilterReorderDisabledSession,
       readStatsBasedFilterReorderDisabled,
       "stats_based_filter_reorder_disabled",

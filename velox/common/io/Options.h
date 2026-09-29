@@ -66,6 +66,12 @@ class ReaderOptions {
   static constexpr int32_t kDefaultCoalesceDistance = 512 << 10; // 512K
   static constexpr int32_t kDefaultCoalesceBytes = 128 << 20; // 128M
   static constexpr int32_t kDefaultPrefetchRowGroups = 1;
+  // Schedules the next load quantum once half of the current one has been
+  // consumed. Over 100 disables read-ahead. Read-ahead is the only thing that
+  // covers the second and later quanta of a column chunk bigger than
+  // 'loadQuantum_', because those are not reachable through
+  // CachedBufferedInput::startLoad().
+  static constexpr int32_t kDefaultPrefetchPct = 50;
 
   explicit ReaderOptions(velox::memory::MemoryPool* pool) : pool_{pool} {
     VELOX_CHECK_NOT_NULL(pool_);
@@ -104,6 +110,14 @@ class ReaderOptions {
   /// Modifies the load quantum.
   ReaderOptions& setLoadQuantum(int32_t quantum) {
     loadQuantum_ = quantum;
+    return *this;
+  }
+
+  /// Modifies the percentage of a load quantum that a stream must have
+  /// returned before the next quantum is scheduled for read-ahead. A value
+  /// over 100 disables read-ahead.
+  ReaderOptions& setPrefetchPct(int32_t pct) {
+    prefetchPct_ = pct;
     return *this;
   }
 
@@ -154,6 +168,10 @@ class ReaderOptions {
 
   int32_t loadQuantum() const {
     return loadQuantum_;
+  }
+
+  int32_t prefetchPct() const {
+    return prefetchPct_;
   }
 
   bool directBufferedInputSharedAllocation() const {
@@ -219,6 +237,7 @@ class ReaderOptions {
   uint64_t autoPreloadLength_{DEFAULT_AUTO_PRELOAD_SIZE};
   PrefetchMode prefetchMode_{PrefetchMode::PREFETCH};
   int32_t loadQuantum_{kDefaultLoadQuantum};
+  int32_t prefetchPct_{kDefaultPrefetchPct};
   bool directBufferedInputSharedAllocation_{false};
   int32_t maxCoalesceDistance_{kDefaultCoalesceDistance};
   int64_t maxCoalesceBytes_{kDefaultCoalesceBytes};
