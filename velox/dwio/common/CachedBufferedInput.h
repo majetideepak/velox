@@ -47,7 +47,12 @@ struct CacheRequest {
   /// accessed large columns where hitting one piece should not load the
   /// adjacent pieces.
   bool coalesces{true};
-  const SeekableInputStream* stream;
+
+  /// The stream this request was enqueued for, used to key
+  /// 'streamToCoalescedLoad_'. Null for the second and later quanta of a
+  /// request that makeRequestParts() split, since only the first quantum is
+  /// what a reader touching the stream asks for.
+  const SeekableInputStream* stream{nullptr};
 };
 
 class CachedBufferedInput : public BufferedInput {
@@ -218,7 +223,8 @@ class CachedBufferedInput : public BufferedInput {
   /// nothing when there is no executor, when the load has already started, or
   /// when another stream of the same coalesced group already submitted it. The
   /// load counts as a prefetch because it runs ahead of the demand for it.
-  void startLoad(const SeekableInputStream* stream);
+  /// Returns true if a planned load was submitted.
+  bool startLoad(const SeekableInputStream* stream);
 
   folly::Executor* executor() const override {
     return executor_;
