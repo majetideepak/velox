@@ -405,19 +405,23 @@ bool SelectiveStructColumnReaderBase::readsChildFromFile(
 
 void SelectiveStructColumnReaderBase::startChildLoads(bool certainlyRead) {
   for (const auto& childSpec : scanSpec_->children()) {
-    const bool childCertainlyRead =
-        childSpec->hasFilter() || childSpec->alwaysReadAfterScan();
-    if (childCertainlyRead != certainlyRead) {
+    // Only a column carrying a pushed-down filter is read whatever the filters
+    // decide, because it is what decides them. Everything else, including a
+    // column the remaining filter always reads, is contingent on the pushed
+    // down filters leaving rows alive.
+    if (childSpec->hasFilter() != certainlyRead) {
       continue;
     }
-    if (isChildConstant(*childSpec) || !childSpec->readFromFile()) {
+    if (childSpec->deltaUpdate() || isChildConstant(*childSpec) ||
+        !childSpec->readFromFile()) {
       // No stream to start, and no reader at 'subscript()' either.
       continue;
     }
-    // A column a post-scan filter always reads is loaded through its
+    // A column the remaining filter always reads is loaded through its
     // LazyVector, so read() skips it and readsChildFromFile() is false for it.
-    // It is started all the same, because something always goes on to load it.
-    if (!childCertainlyRead && !readsChildFromFile(*childSpec)) {
+    // It is started all the same, because something always goes on to load it
+    // once the batch survives.
+    if (!childSpec->alwaysReadAfterScan() && !readsChildFromFile(*childSpec)) {
       continue;
     }
     children_.at(childSpec->subscript())->startLoad();
@@ -549,21 +553,24 @@ void SelectiveStructColumnReaderBase::read(
       continue;
     }
 
+    if (!startedProjectedLoads && !childSpec->hasFilter()) {
+      // Reaching a child without a filter means every filter child has run and
+      // left rows alive, and every constant child so far has passed its filter.
+      // The batch is therefore known to be read, so fetching the columns it
+      // only projects out is not speculative. This has to come before the lazy
+      // branch below: with lazy children generated, every child that reaches
+      // here without a filter takes that branch, so testing afterwards would
+      // never start the contingent loads at all.
+      startChildLoads(/*certainlyRead=*/false);
+      startedProjectedLoads = true;
+    }
+
     const auto fieldIndex = childSpec->subscript();
     auto* reader = children_.at(fieldIndex);
     if (reader->isTopLevel() && childSpec->projectOut() &&
         !childSpec->hasFilter() && generateLazyChildren_) {
       // Will make a LazyVector (with or without transform).
       continue;
-    }
-
-    if (!startedProjectedLoads && !childSpec->hasFilter()) {
-      // Reaching a child without a filter means every filter child has run and
-      // left rows alive, and every constant child so far has passed its filter.
-      // The batch is therefore known to be read, so fetching the columns it
-      // only projects out is not speculative.
-      startChildLoads(/*certainlyRead=*/false);
-      startedProjectedLoads = true;
     }
 
     advanceFieldReader(reader, offset);

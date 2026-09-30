@@ -178,11 +178,12 @@ class ScanSpec {
     return projectOut_ || deltaUpdate_;
   }
 
-  /// True if a consumer of the scan reads this column for every batch the scan
-  /// emits, whatever the filters leave alive. The Hive connector sets it for
-  /// the remaining filter inputs it materializes whole, so that a reader can
-  /// start their IO alongside the filter columns' rather than after the scan
-  /// returns.
+  /// True if a consumer of the scan reads this column whole for every batch the
+  /// scan emits. The Hive connector sets it for the remaining filter inputs it
+  /// materializes whole, so that a reader can start their IO as soon as the
+  /// pushed-down filters have left rows alive rather than after the scan
+  /// returns. It does not make the column certain to be read: a batch the
+  /// pushed-down filters discard never reaches the consumer.
   bool alwaysReadAfterScan() const {
     return alwaysReadAfterScan_;
   }
